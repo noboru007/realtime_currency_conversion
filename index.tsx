@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { GoogleGenAI, Type } from '@google/genai';
+import { apiClient } from './src/api/client';
 
-// EDIT THIS: ご自身のAPIキーをここに貼り付けてください。
-// このキーは、環境に設定されたキーよりも優先して使用されます。
-const YOUR_API_KEY = "AIzaSyC4uGxo8Hxs8ijLrQeXrcctVnfYJaNBDlE";
-
-const API_URL = 'https://corsproxy.io/?https://forex-api.coin.z.com/public/v1/ticker';
 const DETECTION_INTERVAL_MS = 2500;
 
 interface RateData {
-  [currency: string]: number;
+  rates: { [currency: string]: number };
+  timestamp: string;
 }
 
 interface BoundingBox {
@@ -34,7 +30,7 @@ const App: React.FC = () => {
   const [status, setStatus] = useState<'loading' | 'running' | 'error' | 'missing_api_key'>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [banner, setBanner] = useState<Banner | null>(null);
-  const [rates, setRates] = useState<RateData | null>(null);
+  const [rates, setRates] = useState<{ [currency: string]: number } | null>(null);
   const [targetCurrency, setTargetCurrency] = useState<string>('USD');
   const [detections, setDetections] = useState<Detection[]>([]);
   const [isPaused, setIsPaused] = useState<boolean>(false);
@@ -43,47 +39,15 @@ const App: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isProcessingRef = useRef<boolean>(false);
-  const aiRef = useRef<GoogleGenAI | null>(null);
-
-  const responseSchema = {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        amount: { type: Type.NUMBER, description: 'The numeric value of the price.' },
-        boundingBox: {
-          type: Type.OBJECT,
-          properties: {
-            x: { type: Type.NUMBER, description: 'Left position as a percentage (0-100)' },
-            y: { type: Type.NUMBER, description: 'Top position as a percentage (0-100)' },
-            width: { type: Type.NUMBER, description: 'Width as a percentage (0-100)' },
-            height: { type: Type.NUMBER, description: 'Height as a percentage (0-100)' },
-          },
-          required: ['x', 'y', 'width', 'height'],
-        },
-      },
-      required: ['amount', 'boundingBox'],
-    },
-  };
 
   useEffect(() => {
-    const apiKey = (YOUR_API_KEY && !YOUR_API_KEY.includes('ご自身のAPIキーをここに貼り付けてください'))
-      ? YOUR_API_KEY
-      : process.env.API_KEY;
-
-    if (apiKey) {
-      initialize(apiKey);
-    } else {
-      setStatus('missing_api_key');
-    }
+    initialize();
   }, []);
 
-  const initialize = async (apiKey: string) => {
+  const initialize = async () => {
     setStatus('loading');
     setErrorMessage('');
     try {
-      aiRef.current = new GoogleGenAI({ apiKey });
-
       await startCamera();
       
       try {
@@ -92,7 +56,7 @@ const App: React.FC = () => {
         console.warn('Failed to fetch new rates, attempting to load from cache.', fetchError);
         const cachedRatesJson = localStorage.getItem('cachedRates');
         if (cachedRatesJson) {
-            const cachedRates = JSON.parse(cachedRatesJson) as RateData;
+            const cachedRates = JSON.parse(cachedRatesJson) as { [currency: string]: number };
             setRates(cachedRates);
             if (!cachedRates['USD'] && Object.keys(cachedRates).length > 0) {
                 setTargetCurrency(Object.keys(cachedRates)[0]);
@@ -112,12 +76,7 @@ const App: React.FC = () => {
 
     } catch (err) {
       let message = err instanceof Error ? err.message : 'An unknown error occurred.';
-      if (message.includes('API key not valid') || message.includes('API_KEY_INVALID')) {
-        message = `APIキーが無効です。index.tsx ファイルの YOUR_API_KEY 定数が正しいか確認してください。`;
-        setStatus('missing_api_key');
-      } else {
-        setStatus('error');
-      }
+      setStatus('error');
       setErrorMessage(message);
     }
   };
@@ -137,28 +96,21 @@ const App: React.FC = () => {
   };
 
   const fetchRates = async () => {
-    const response = await fetch(API_URL);
-    if (!response.ok) {
-      throw new Error('Failed to fetch exchange rates.');
-    }
-    const data = await response.json();
-    const processedRates: RateData = {};
-    data.data.forEach((item: any) => {
-      const [currency] = item.symbol.split('/');
-      if (currency !== 'JPY') {
-        processedRates[currency] = parseFloat(item.last);
-      }
-    });
-    setRates(processedRates);
-    localStorage.setItem('cachedRates', JSON.stringify(processedRates));
+    try {
+      const data = await apiClient.getExchangeRates();
+      setRates(data.rates);
+      localStorage.setItem('cachedRates', JSON.stringify(data.rates));
 
-    if (!processedRates['USD'] && Object.keys(processedRates).length > 0) {
-      setTargetCurrency(Object.keys(processedRates)[0]);
+      if (!data.rates['USD'] && Object.keys(data.rates).length > 0) {
+        setTargetCurrency(Object.keys(data.rates)[0]);
+      }
+    } catch (error) {
+      throw new Error('Failed to fetch exchange rates.');
     }
   };
 
   const detectPrices = async () => {
-    if (isProcessingRef.current || !videoRef.current || !canvasRef.current || !aiRef.current) {
+    if (isProcessingRef.current || !videoRef.current || !canvasRef.current) {
       return;
     }
 
@@ -177,29 +129,12 @@ const App: React.FC = () => {
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     try {
-      const base64Data = canvas.toDataURL('image/jpeg').split(',')[1];
-      const imagePart = {
-        inlineData: {
-          mimeType: 'image/jpeg',
-          data: base64Data,
-        },
-      };
-      const textPart = {
-        text: `Analyze the image to find any visible prices. Prices may be preceded by '¥' or end with '円'. Assume the currency is Japanese Yen (JPY) if no symbol is present. For each price found, provide the numeric amount and its location as a bounding box (x, y, width, height) in percentages relative to the image dimensions. Return the data in the specified JSON format. If no prices are found, return an empty array.`
-      };
-
-      const response = await aiRef.current.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { parts: [imagePart, textPart] },
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: responseSchema,
-        },
-      });
+      const imageData = canvas.toDataURL('image/jpeg');
+      
+      const response = await apiClient.detectPrices(imageData, targetCurrency);
       
       setBanner(null); // Clear previous errors on success
-      const parsedDetections = JSON.parse(response.text);
-      setDetections(parsedDetections);
+      setDetections(response.detections);
     } catch (error) {
       console.error('Error detecting prices:', error);
       if (error instanceof Error && (error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED'))) {
@@ -290,7 +225,7 @@ const App: React.FC = () => {
       <>
         <div className="overlay-container">
           {detections.map((detection, index) => {
-            const convertedAmount = rates && rates[targetCurrency] ? detection.amount / rates[targetCurrency] : 0;
+            const convertedAmount = rates && rates[targetCurrency] ? detection.amount * rates[targetCurrency] : 0;
             return (
               <div
                 key={index}
