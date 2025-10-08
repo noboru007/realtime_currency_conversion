@@ -1,0 +1,45 @@
+# デフォルトですべてのテキストファイルをLFに統一
+* text=auto eol=lf
+
+# Pythonファイル
+*.py text eol=lf
+*.pyw text eol=lf
+
+# CSVファイル（重要：データが壊れないようにLFで固定）
+*.csv text eol=lf
+
+# 設定ファイル
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.conf text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# ドキュメント
+*.md text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+
+# シェルスクリプト
+*.sh text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# バイナリファイル（変換しない）
+*.pdf binary
+*.docx binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.ico binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+
+# ログファイル
+*.log text eol=lf
+
