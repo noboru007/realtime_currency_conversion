@@ -4,7 +4,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 
 // EDIT THIS: ご自身のAPIキーをここに貼り付けてください。
 // このキーは、環境に設定されたキーよりも優先して使用されます。
-const YOUR_API_KEY = "AIzaSyC4uGxo8Hxs8ijLrQeXrcctVnfYJaNBDlE";
+const YOUR_API_KEY = "";
 
 const API_URL = 'https://corsproxy.io/?https://forex-api.coin.z.com/public/v1/ticker';
 const DETECTION_INTERVAL_MS = 2500;
