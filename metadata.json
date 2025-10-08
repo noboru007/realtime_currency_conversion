@@ -1,0 +1,7 @@
+{
+  "name": "Live Currency Converter",
+  "description": "Point your camera at a price in JPY and see it converted to other currencies in real-time.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
