@@ -143,11 +143,10 @@ async def get_exchange_rates():
             symbol = item.get("symbol", "")
             price = item.get("ask", 0)
             if symbol and price:
-                # シンボルから通貨ペアを分離
-                if len(symbol) >= 6:
-                    base_currency = symbol[:3]
-                    quote_currency = symbol[3:6]
-                    rates[f"{base_currency}/{quote_currency}"] = price
+                # GMO Coin APIのシンボル形式: "USD_JPY"
+                if "_" in symbol:
+                    base_currency, quote_currency = symbol.split("_")
+                    rates[f"{base_currency}/{quote_currency}"] = float(price)
         
         return RateData(rates=rates, timestamp=data.get("timestamp", ""))
         
