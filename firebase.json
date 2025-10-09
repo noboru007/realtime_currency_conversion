@@ -34,6 +34,9 @@
   },
   "functions": {
     "source": "backend/functions",
-    "runtime": "python311"
+    "ignore": [
+      "venv",
+      "**/__pycache__"
+    ]
   }
 }

@@ -1,5 +1,6 @@
-import functions_framework
-from flask import jsonify, request
+from firebase_functions import https_fn, options
+from firebase_functions.options import set_global_options
+from firebase_admin import initialize_app
 import google.generativeai as genai
 import requests
 import json
@@ -7,206 +8,142 @@ import base64
 import os
 from io import BytesIO
 from PIL import Image
+from dotenv import load_dotenv
+
+# 環境変数を読み込み
+load_dotenv()
 
 # Gemini API設定
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-@functions_framework.http
-def detect_prices(request):
-    """画像から価格を検出するFirebase Function"""
-    # CORS設定
-    if request.method == 'OPTIONS':
-        headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST',
-            'Access-Control-Allow-Headers': 'Content-Type',
-            'Access-Control-Max-Age': '3600'
-        }
-        return ('', 204, headers)
+# For cost control, you can set the maximum number of containers that can be
+# running at the same time. This helps mitigate the impact of unexpected
+# traffic spikes by instead downgrading performance. This limit is a per-function
+# limit. You can override the limit for each function using the max_instances
+# parameter in the decorator, e.g. @https_fn.on_request(max_instances=5).
+set_global_options(max_instances=10)
+
+initialize_app()
+
+@https_fn.on_request(
+    secrets=["GEMINI_API_KEY"],
+    cors=options.CorsOptions(
+        cors_origins=["*"],  # またはあなたのウェブアプリのドメイン
+        cors_methods=["get", "post", "options"]
+    )
+)
+def detectPrices(req: https_fn.Request) -> https_fn.Response:
+    """Firebase Function for price detection."""
     
-    headers = {
-        'Access-Control-Allow-Origin': '*'
-    }
-    
+    # Check API key only for non-OPTIONS requests
+    if not GEMINI_API_KEY:
+        return https_fn.Response(
+            json.dumps({"success": False, "error": "Gemini API key not configured"}),
+            status=500,
+            headers={**cors_headers, "Content-Type": "application/json"}
+        )
+
     try:
-        if request.method != 'POST':
-            return (jsonify({'error': 'Method not allowed'}), 405, headers)
-        
-        data = request.get_json()
-        if not data or 'image_data' not in data:
-            return (jsonify({'error': 'Missing image_data'}), 400, headers)
-        
-        image_data = data['image_data']
-        target_currency = data.get('target_currency', 'USD')
-        
+        request_json = req.get_json(silent=True)
+        if not request_json or 'image_data' not in request_json:
+            return https_fn.Response(
+                json.dumps({"success": False, "error": "Invalid request body"}),
+                status=400,
+                headers=headers
+            )
+
+        image_data_base64 = request_json['image_data']
+        target_currency = request_json.get('target_currency', 'USD')
+
         # 画像データをデコード
-        image_bytes = base64.b64decode(image_data.split(',')[1] if ',' in image_data else image_data)
-        image = Image.open(BytesIO(image_bytes))
-        
+        image_data = base64.b64decode(image_data_base64.split(',')[1] if ',' in image_data_base64 else image_data_base64)
+        image = Image.open(BytesIO(image_data))
+
         # Gemini Vision APIを使用
         model = genai.GenerativeModel('gemini-1.5-flash')
-        
-                prompt = f"""
-                この画像内の価格と通貨記号を検出してください。価格は数値で表示されており、通貨記号（¥、$、€、£、₩など）が含まれている可能性があります。
-                検出された価格の数値部分と通貨記号を抽出し、その位置情報も含めて返してください。
-                ターゲット通貨: {target_currency}
 
-                以下の形式でJSONを返してください:
-                [
-                    {{
-                        "amount": 数値,
-                        "currency": "通貨記号（例：¥、$、€）",
-                        "boundingBox": {{
-                            "x": 左端の位置（0-100のパーセンテージ）,
-                            "y": 上端の位置（0-100のパーセンテージ）,
-                            "width": 幅（0-100のパーセンテージ）,
-                            "height": 高さ（0-100のパーセンテージ）
-                        }}
-                    }}
-                ]
-                """
-        
+        prompt = f"""
+        この画像内の価格と通貨記号を検出してください。価格は数値で表示されており、通貨記号（¥、$、€、£、₩など）が含まれている可能性があります。
+        検出された価格の数値部分と通貨記号を抽出し、その位置情報も含めて返してください。
+        ターゲット通貨: {target_currency}
+
+        以下の形式でJSONを返してください:
+        [
+            {{
+                "amount": 数値,
+                "currency": "通貨記号（例：¥、$、€）",
+                "boundingBox": {{
+                    "x": 左端の位置（0-100のパーセンテージ）,
+                    "y": 上端の位置（0-100のパーセンテージ）,
+                    "width": 幅（0-100のパーセンテージ）,
+                    "height": 高さ（0-100のパーセンテージ）
+                }}
+            }}
+        ]
+        """
+
         response = model.generate_content([prompt, image])
         result_text = response.text
-        
-        # JSONをパース
+
         try:
             detections = json.loads(result_text)
             if not isinstance(detections, list):
                 detections = [detections]
         except json.JSONDecodeError:
-            # JSONパースに失敗した場合、テキストから数値を抽出
             import re
             numbers = re.findall(r'\d+\.?\d*', result_text)
-            detections = [{"amount": float(num), "boundingBox": {"x": 0, "y": 0, "width": 100, "height": 100}} for num in numbers[:5]]
-        
-        return (jsonify({
-            'detections': detections,
-            'success': True
-        }), 200, headers)
-        
-    except Exception as e:
-        return (jsonify({
-            'detections': [],
-            'success': False,
-            'error': str(e)
-        }), 500, headers)
+            detections = [{"amount": float(num), "currency": "¥", "boundingBox": {"x": 0, "y": 0, "width": 100, "height": 100}} for num in numbers[:5]]
 
-@functions_framework.http
-def exchange_rates(request):
-    """為替レートを取得するFirebase Function"""
-    # CORS設定
-    if request.method == 'OPTIONS':
-        headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET',
-            'Access-Control-Allow-Headers': 'Content-Type',
-            'Access-Control-Max-Age': '3600'
-        }
-        return ('', 204, headers)
-    
-    headers = {
-        'Access-Control-Allow-Origin': '*'
-    }
-    
+        return https_fn.Response(
+            json.dumps({"detections": detections, "success": True}),
+            status=200,
+            # headers=headers
+        )
+
+    except Exception as e:
+        return https_fn.Response(
+            json.dumps({"success": False, "error": str(e)}),
+            status=500,
+            headers=headers
+        )
+
+@https_fn.on_request(
+    secrets=["GEMINI_API_KEY"],
+    cors=options.CorsOptions(
+        cors_origins=["*"],  # またはあなたのウェブアプリのドメイン
+        cors_methods=["get", "post", "options"]
+    )
+)
+def getExchangeRates(req: https_fn.Request) -> https_fn.Response:
+    """為替レートを取得するFirebase Function."""
+
     try:
-        # GMOコインのAPIから為替レートを取得
         response = requests.get("https://forex-api.coin.z.com/public/v1/ticker", timeout=10)
         response.raise_for_status()
-        
+
         data = response.json()
         rates = {}
-        
-        # レスポンスから為替レートを抽出
+
         for item in data.get("data", []):
             symbol = item.get("symbol", "")
             price = item.get("ask", 0)
             if symbol and price:
-                # シンボルから通貨ペアを分離
-                if len(symbol) >= 6:
-                    base_currency = symbol[:3]
-                    quote_currency = symbol[3:6]
-                    rates[f"{base_currency}/{quote_currency}"] = price
-        
-        return (jsonify({
-            'rates': rates,
-            'timestamp': data.get("timestamp", ""),
-            'success': True
-        }), 200, headers)
-        
-    except Exception as e:
-        return (jsonify({
-            'rates': {},
-            'success': False,
-            'error': str(e)
-        }), 500, headers)
+                # GMO Coin APIのシンボル形式: "USD_JPY"
+                if "_" in symbol:
+                    base_currency, quote_currency = symbol.split("_")
+                    rates[f"{base_currency}/{quote_currency}"] = float(price)
 
-@functions_framework.http
-def convert_currency(request):
-    """通貨変換を行うFirebase Function"""
-    # CORS設定
-    if request.method == 'OPTIONS':
-        headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET',
-            'Access-Control-Allow-Headers': 'Content-Type',
-            'Access-Control-Max-Age': '3600'
-        }
-        return ('', 204, headers)
-    
-    headers = {
-        'Access-Control-Allow-Origin': '*'
-    }
-    
-    try:
-        amount = float(request.args.get('amount', 0))
-        from_currency = request.args.get('from_currency', 'JPY')
-        to_currency = request.args.get('to_currency', 'USD')
-        
-        # 為替レートを取得
-        rates_response = requests.get("https://forex-api.coin.z.com/public/v1/ticker", timeout=10)
-        rates_response.raise_for_status()
-        rates_data = rates_response.json()
-        
-        rates = {}
-        for item in rates_data.get("data", []):
-            symbol = item.get("symbol", "")
-            price = item.get("ask", 0)
-            if symbol and price:
-                if len(symbol) >= 6:
-                    base_currency = symbol[:3]
-                    quote_currency = symbol[3:6]
-                    rates[f"{base_currency}/{quote_currency}"] = price
-        
-        # 通貨ペアのキーを構築
-        pair_key = f"{from_currency}/{to_currency}"
-        reverse_pair_key = f"{to_currency}/{from_currency}"
-        
-        if pair_key in rates:
-            converted_amount = amount * rates[pair_key]
-            exchange_rate = rates[pair_key]
-        elif reverse_pair_key in rates:
-            converted_amount = amount / rates[reverse_pair_key]
-            exchange_rate = 1 / rates[reverse_pair_key]
-        else:
-            return (jsonify({
-                'error': f'Exchange rate not found for {from_currency}/{to_currency}',
-                'success': False
-            }), 400, headers)
-        
-        return (jsonify({
-            'original_amount': amount,
-            'from_currency': from_currency,
-            'to_currency': to_currency,
-            'converted_amount': round(converted_amount, 2),
-            'exchange_rate': exchange_rate,
-            'success': True
-        }), 200, headers)
-        
+        return https_fn.Response(
+            json.dumps({"rates": rates, "timestamp": data.get("timestamp", "")}),
+            status=200,
+            # headers=headers
+        )
+
     except Exception as e:
-        return (jsonify({
-            'error': str(e),
-            'success': False
-        }), 500, headers)
+        return https_fn.Response(
+            json.dumps({"success": False, "error": f"Failed to fetch exchange rates: {str(e)}"}),
+            status=500,
+            headers=headers
+        )

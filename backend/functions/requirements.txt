@@ -1,14 +1,6 @@
-# Firebase Functions
-functions-framework==3.7.0
-
-# Google Generative AI
+firebase_functions~=0.1.0
 google-generativeai==0.8.3
-
-# HTTP requests
 requests==2.32.3
-
-# Image processing
 Pillow==11.0.0
-
-# Environment variables
 python-dotenv==1.0.1
+

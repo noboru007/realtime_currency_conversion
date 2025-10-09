@@ -19,3 +19,6 @@ python-multipart==0.0.12
 
 # Environment variables
 python-dotenv==1.0.1
+
+# Firebase Functions (for deployment only)
+firebase_functions~=0.1.0

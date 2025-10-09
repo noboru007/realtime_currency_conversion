@@ -1,5 +1,7 @@
+/// <reference types="vite/client" />
+
 // API クライアント設定
-const API_BASE_URL = 'http://192.168.0.29:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://us-central1-realtime-currency-converter.cloudfunctions.net';
 
 export interface DetectionRequest {
   image_data: string;
@@ -43,7 +45,7 @@ export interface ConversionResponse {
 export const apiClient = {
   // 価格検出
   async detectPrices(imageData: string, targetCurrency: string = 'USD'): Promise<DetectionResponse> {
-    const response = await fetch(`${API_BASE_URL}/detect-prices`, {
+    const response = await fetch(`${API_BASE_URL}/detectPrices`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -63,7 +65,7 @@ export const apiClient = {
 
   // 為替レート取得
   async getExchangeRates(): Promise<RateData> {
-    const response = await fetch(`${API_BASE_URL}/exchange-rates`);
+    const response = await fetch(`${API_BASE_URL}/getExchangeRates`);
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.statusText}`);
