@@ -18,6 +18,7 @@ interface BoundingBox {
 
 interface Detection {
   amount: number;
+  currency?: string;
   boundingBox: BoundingBox;
 }
 
@@ -31,10 +32,12 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [banner, setBanner] = useState<Banner | null>(null);
   const [rates, setRates] = useState<{ [currency: string]: number } | null>(null);
-  const [targetCurrency, setTargetCurrency] = useState<string>('USD');
+  const [homeCurrency, setHomeCurrency] = useState<string>('USD'); // 自国通貨
+  const [localCurrency, setLocalCurrency] = useState<string>(''); // 現地通貨
   const [detections, setDetections] = useState<Detection[]>([]);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isFileUploadMode, setIsFileUploadMode] = useState<boolean>(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -59,9 +62,9 @@ const App: React.FC = () => {
         if (cachedRatesJson) {
             const cachedRates = JSON.parse(cachedRatesJson) as { [currency: string]: number };
             setRates(cachedRates);
-            if (!cachedRates['USD'] && Object.keys(cachedRates).length > 0) {
-                setTargetCurrency(Object.keys(cachedRates)[0]);
-            }
+                if (!cachedRates['USD'] && Object.keys(cachedRates).length > 0) {
+                    setHomeCurrency(Object.keys(cachedRates)[0]);
+                }
             setBanner({ message: '為替レートの取得に失敗しました。前回保存したデータを使用しています。', type: 'warning' });
         } else {
             throw new Error('為替レートの取得に失敗し、保存されたデータもありません。');
@@ -82,6 +85,25 @@ const App: React.FC = () => {
     }
   };
 
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const imageData = e.target?.result as string;
+              const response = await apiClient.detectPrices(imageData, homeCurrency);
+        setDetections(response.detections);
+        setBanner(null);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('File upload error:', error);
+      setBanner({ message: 'ファイルの処理に失敗しました。', type: 'error' });
+    }
+  };
 
   const startCamera = async () => {
     try {
@@ -113,9 +135,9 @@ const App: React.FC = () => {
       setRates(data.rates);
       localStorage.setItem('cachedRates', JSON.stringify(data.rates));
 
-      if (!data.rates['USD'] && Object.keys(data.rates).length > 0) {
-        setTargetCurrency(Object.keys(data.rates)[0]);
-      }
+              if (!data.rates['USD'] && Object.keys(data.rates).length > 0) {
+                setHomeCurrency(Object.keys(data.rates)[0]);
+              }
     } catch (error) {
       throw new Error('Failed to fetch exchange rates.');
     }
@@ -143,7 +165,7 @@ const App: React.FC = () => {
     try {
       const imageData = canvas.toDataURL('image/jpeg');
       
-      const response = await apiClient.detectPrices(imageData, targetCurrency);
+              const response = await apiClient.detectPrices(imageData, homeCurrency);
       
       setBanner(null); // Clear previous errors on success
       setDetections(response.detections);
@@ -197,6 +219,88 @@ const App: React.FC = () => {
     }
   };
 
+  const getCurrencyFromSymbol = (symbol: string): string => {
+    const symbolMap: { [key: string]: string } = {
+      '¥': 'JPY',
+      '$': 'USD',
+      '€': 'EUR',
+      '£': 'GBP',
+      '₩': 'KRW',
+      '₹': 'INR',
+      '₽': 'RUB',
+      '₪': 'ILS',
+      '₦': 'NGN',
+      '₨': 'PKR',
+      '₫': 'VND',
+      '₱': 'PHP',
+      '₴': 'UAH',
+      '₸': 'KZT',
+      '₼': 'AZN',
+      '₾': 'GEL',
+      '₿': 'BTC'
+    };
+    return symbolMap[symbol] || 'USD';
+  };
+
+  const convertCurrency = (amount: number, fromCurrency: string, toCurrency: string): number => {
+    if (!rates || fromCurrency === toCurrency) return amount;
+    
+    const pairKey = `${fromCurrency}/${toCurrency}`;
+    const reversePairKey = `${toCurrency}/${fromCurrency}`;
+    
+    // Ask/Bidレートの適用
+    // ユーザーが海外で現地通貨建ての商品を自国通貨で購入する状況
+    // 現地通貨を買う（Askレート）または自国通貨を売る（Bidレート）
+    if (rates[pairKey]) {
+      // 現地通貨を買う場合：Askレートを適用
+      return amount * rates[pairKey];
+    } else if (rates[reversePairKey]) {
+      // 自国通貨を売る場合：Bidレートを適用（1/Askレート）
+      return amount / rates[reversePairKey];
+    }
+    
+    return 0;
+  };
+
+  const getExchangeRateDisplay = () => {
+    if (!rates || !homeCurrency || !localCurrency) return null;
+    
+    const pairKey = `${localCurrency}/${homeCurrency}`;
+    const reversePairKey = `${homeCurrency}/${localCurrency}`;
+    
+    let rate1 = 0;
+    let rate2 = 0;
+    
+    if (rates[pairKey]) {
+      rate1 = rates[pairKey];
+      rate2 = 1 / rate1;
+    } else if (rates[reversePairKey]) {
+      rate2 = rates[reversePairKey];
+      rate1 = 1 / rate2;
+    }
+    
+    if (rate1 === 0 || rate2 === 0) return null;
+    
+    // JPYやKRWのような低価値通貨の調整
+    const adjustForLowValueCurrency = (currency: string, amount: number) => {
+      if (currency === 'JPY' || currency === 'KRW') {
+        return (amount * 100).toFixed(2);
+      }
+      return amount.toFixed(4);
+    };
+    
+    return (
+      <div className="exchange-rate-display">
+        <div className="rate-line">
+          1 {localCurrency} = {adjustForLowValueCurrency(localCurrency, rate1)} {homeCurrency}
+        </div>
+        <div className="rate-line">
+          1 {homeCurrency} = {adjustForLowValueCurrency(homeCurrency, rate2)} {localCurrency}
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     if (status === 'loading') {
       return (
@@ -237,7 +341,15 @@ const App: React.FC = () => {
       <>
         <div className="overlay-container">
           {detections.map((detection, index) => {
-            const convertedAmount = rates && rates[targetCurrency] ? detection.amount * rates[targetCurrency] : 0;
+            // 通貨記号から通貨コードを推定
+            const detectedCurrency = detection.currency ? 
+              getCurrencyFromSymbol(detection.currency) : 
+              (localCurrency || 'JPY');
+            
+            // 現地通貨から自国通貨への換算
+            const convertedAmount = rates && homeCurrency && detectedCurrency ? 
+              convertCurrency(detection.amount, detectedCurrency, homeCurrency) : 0;
+            
             return (
               <div
                 key={index}
@@ -250,27 +362,48 @@ const App: React.FC = () => {
                 }}
                 aria-live="polite"
               >
-                <div>{formatCurrency(convertedAmount, targetCurrency)}</div>
-                <div className="original-price">{formatCurrency(detection.amount, 'JPY')}</div>
+                <div className="converted-amount">{formatCurrency(convertedAmount, homeCurrency)}</div>
+                <div className="original-price">{formatCurrency(detection.amount, detectedCurrency)}</div>
               </div>
             );
           })}
         </div>
         {rates && (
           <div className="controls">
-            <label htmlFor="currency-select">変換先:</label>
-            <select
-              id="currency-select"
-              value={targetCurrency}
-              onChange={(e) => setTargetCurrency(e.target.value)}
-              aria-label="Select target currency for conversion"
-            >
-              {Object.keys(rates).sort().map((currency) => (
-                <option key={currency} value={currency}>
-                  {currency}
-                </option>
-              ))}
-            </select>
+            <div className="currency-settings">
+              <div className="currency-selector">
+                <label htmlFor="home-currency">自国通貨:</label>
+                <select
+                  id="home-currency"
+                  value={homeCurrency}
+                  onChange={(e) => setHomeCurrency(e.target.value)}
+                  aria-label="Select home currency"
+                >
+                  {Object.keys(rates).sort().map((currency) => (
+                    <option key={currency} value={currency}>
+                      {currency}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {getExchangeRateDisplay()}
+              <div className="currency-selector">
+                <label htmlFor="local-currency">現地通貨:</label>
+                <select
+                  id="local-currency"
+                  value={localCurrency}
+                  onChange={(e) => setLocalCurrency(e.target.value)}
+                  aria-label="Select local currency"
+                >
+                  <option value="">選択してください</option>
+                  {Object.keys(rates).sort().map((currency) => (
+                    <option key={currency} value={currency}>
+                      {currency}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <button onClick={togglePause} className="pause-button" aria-label={isPaused ? 'スキャンを再開' : 'スキャンを一時停止'}>
               {isPaused ? (
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
