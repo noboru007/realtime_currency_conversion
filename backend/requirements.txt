@@ -1,21 +1,21 @@
 # Web Framework
-fastapi==0.104.1
-uvicorn==0.24.0
+fastapi==0.115.5
+uvicorn==0.32.1
 
 # Data validation and settings
-pydantic==2.5.0
+pydantic==2.10.3
 
 # HTTP requests
-requests==2.31.0
+requests==2.32.3
 
 # Image processing
-Pillow==10.1.0
+Pillow==11.0.0
 
 # Google Generative AI
 google-generativeai==0.8.3
 
 # CORS middleware
-python-multipart==0.0.6
+python-multipart==0.0.12
 
 # Environment variables
-python-dotenv==1.0.0
+python-dotenv==1.0.1
