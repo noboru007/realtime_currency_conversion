@@ -48,6 +48,7 @@ const App: React.FC = () => {
     setStatus('loading');
     setErrorMessage('');
     try {
+      // カメラ機能を有効化（エラーハンドリング付き）
       await startCamera();
       
       try {
@@ -83,15 +84,26 @@ const App: React.FC = () => {
 
 
   const startCamera = async () => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        console.log('カメラアクセスを試行中...');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          console.log('カメラアクセス成功');
+        }
+      } else {
+        throw new Error('Camera not supported by this browser.');
       }
-    } else {
-      throw new Error('Camera not supported by this browser.');
+    } catch (error) {
+      console.error('カメラエラー:', error);
+      // カメラエラーを無視して続行
+      setBanner({ 
+        message: 'カメラアクセスに失敗しました。ファイルアップロード機能を使用してください。', 
+        type: 'warning' 
+      });
     }
   };
 

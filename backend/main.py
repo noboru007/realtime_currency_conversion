@@ -5,6 +5,11 @@ from typing import List, Dict, Any
 import google.generativeai as genai
 import requests
 import os
+from dotenv import load_dotenv
+
+# 環境変数を読み込み
+load_dotenv()
+
 import json
 import base64
 from io import BytesIO
@@ -178,5 +183,6 @@ async def convert_currency(amount: float, from_currency: str, to_currency: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
+    load_dotenv()
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
