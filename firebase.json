@@ -8,25 +8,25 @@
     ],
     "rewrites": [
       {
+        "source": "/detectPrices",
+        "function": "detectPrices"
+      },
+      {
+        "source": "/getExchangeRates",
+        "function": "getExchangeRates"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
     ],
     "headers": [
       {
-        "source": "**",
+        "source": "/**", // すべてのファイルに適用
         "headers": [
           {
             "key": "Access-Control-Allow-Origin",
-            "value": "*"
-          },
-          {
-            "key": "Access-Control-Allow-Methods",
-            "value": "GET, POST, PUT, DELETE, OPTIONS"
-          },
-          {
-            "key": "Access-Control-Allow-Headers",
-            "value": "Content-Type, Authorization"
+            "value": "*" // すべてのオリジンを許可
           }
         ]
       }
@@ -34,9 +34,6 @@
   },
   "functions": {
     "source": "backend/functions",
-    "ignore": [
-      "venv",
-      "**/__pycache__"
-    ]
+    "runtime": "python311" // runtimeを元に戻す
   }
 }
