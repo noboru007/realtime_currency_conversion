@@ -1,65 +1,69 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
+import './index.css'; // CSSのインポート
 import { apiClient } from './src/api/client';
 import { useCurrencyStore } from './src/store/useCurrencyStore'; // Zustandストアをインポート
 
-// DetectionとBoundingBoxの型定義はストアから取得できるので不要になる場合がありますが、
-// 可読性のために残しても良いでしょう。
-interface BoundingBox {
-  x: number; y: number; width: number; height: number;
-}
-interface Detection {
-  amount: number; currency?: string; boundingBox: BoundingBox;
-}
-
 const App: React.FC = () => {
-  // --- ストアからグローバルな状態とアクションを取得 ---
   const {
     status, banner, rates, homeCurrency, localCurrency, detections,
     setStatus, setBanner, setHomeCurrency, setLocalCurrency, setDetections,
     fetchRates
   } = useCurrencyStore();
 
-  // --- このコンポーネント内でのみ使用するローカルな状態 ---
-  const [isPaused, setIsPaused] = useState<boolean>(true); // 初期状態をPausedに
+  const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isProcessingRef = useRef<boolean>(false);
-
+  
   // --- 初期化処理 ---
   useEffect(() => {
     const initialize = async () => {
       setStatus('loading');
-      await startCamera(); // カメラの起動はUIに密接なのでここで行う
-      await fetchRates();   // ストアのアクションを呼び出してレートを取得
+      await startCamera();
+      await fetchRates();
       setStatus('running');
     };
     initialize();
-  }, [fetchRates, setStatus]); // 依存配列にストアのアクションを追加
+  }, [fetchRates, setStatus]);
 
-  // --- カメラ起動ロジック ---
+  // カメラ起動ロジック
   const startCamera = async () => {
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          // カメラが再生を開始したらスキャンループを開始
+          videoRef.current.oncanplay = () => {
+            setIsPaused(false); // 自動的にスキャン開始
+            requestAnimationFrame(scanLoop);
+          };
         }
       } else {
         throw new Error('Camera not supported.');
       }
     } catch (error) {
-      setBanner({ message: 'カメラアクセスに失敗。ファイルアップロード機能を使用してください。', type: 'warning' });
+      setBanner({ message: 'カメラアクセスに失敗。ページをリロードするか、設定を確認してください。', type: 'error' });
+      setStatus('error');
     }
   };
   
-  // --- 価格検出ロジック ---
+  // スキャンループ
+  const scanLoop = () => {
+    if (isPaused || isAnalyzing) {
+      requestAnimationFrame(scanLoop);
+      return;
+    }
+    detectPrices();
+    setTimeout(() => requestAnimationFrame(scanLoop), 1000); // 1秒ごとに実行
+  };
+
+  // 価格検出ロジック
   const detectPrices = async () => {
-    if (isProcessingRef.current || !videoRef.current || !canvasRef.current || !videoRef.current.srcObject) return;
+    if (!videoRef.current || !canvasRef.current || !videoRef.current.srcObject) return;
     
-    isProcessingRef.current = true;
     setIsAnalyzing(true);
 
     const video = videoRef.current;
@@ -67,8 +71,8 @@ const App: React.FC = () => {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const context = canvas.getContext('2d');
+    
     if (!context) {
-        isProcessingRef.current = false;
         setIsAnalyzing(false);
         return;
     }
@@ -77,121 +81,141 @@ const App: React.FC = () => {
     try {
       const imageData = canvas.toDataURL('image/jpeg');
       const response = await apiClient.detectPrices(imageData, homeCurrency);
-      setDetections(response.detections); // ストアの状態を更新
-      setBanner(null);
+      setDetections(response.detections);
+      // 成功したらエラーバナーを消す
+      if (banner?.type === 'error') setBanner(null);
     } catch (error) {
       console.error('Error detecting prices:', error);
       setBanner({ message: '価格の検出中にAPIエラーが発生しました。', type: 'error' });
       setDetections([]);
     } finally {
-      isProcessingRef.current = false;
       setIsAnalyzing(false);
     }
   };
   
-  // --- UIイベントハンドラ ---
-  const togglePause = () => {
-    if (isPaused) {
-      setIsPaused(false);
-      detectPrices().finally(() => setIsPaused(true));
+  // --- レンダリング用のヘルパー関数 ---
+  
+  const getExchangeRate = (from: string, to: string): number | null => {
+    if (!rates) return null;
+    if (from === to) return 1;
+    const directRate = rates[`${from}/${to}`];
+    if (directRate) return directRate;
+    const inverseRate = rates[`${to}/${from}`];
+    if (inverseRate) return 1 / inverseRate;
+    
+    // クロスレート計算 (例: USD/JPY と EUR/USD から EUR/JPY を計算)
+    const usdRateFrom = rates[`${from}/USD`];
+    const usdRateTo = rates[`USD/${to}`];
+    if (usdRateFrom && usdRateTo) return usdRateFrom * usdRateTo;
+
+    return null;
+  };
+
+  const convertCurrency = (amount: number, fromCurrency: string, toCurrency: string): number => {
+    const rate = getExchangeRate(fromCurrency, toCurrency);
+    if (rate === null) return 0;
+    
+    // 低額通貨の調整
+    const converted = amount * rate;
+    if (['JPY', 'KRW', 'VND'].includes(toCurrency)) {
+        return Math.round(converted);
+    }
+    return parseFloat(converted.toFixed(2));
+  };
+
+  const formatCurrency = (amount: number, currency: string): string => {
+    try {
+        return new Intl.NumberFormat(undefined, {
+            style: 'currency',
+            currency: currency,
+            currencyDisplay: 'symbol'
+        }).format(amount);
+    } catch (e) {
+        return `${amount.toFixed(2)} ${currency}`;
     }
   };
 
-  // --- レンダリング用のヘルパー関数 ---
-  // formatCurrency, getCurrencyFromSymbol, convertCurrency, getExchangeRateDisplayは
-  // 内部でratesやhomeCurrencyを直接ストアから参照するため、引数として渡す必要がなくなる。
-  // (内容は変更ないので省略)
-  const formatCurrency = (amount: number, currency: string) => { /* ...内容は変更なし... */ };
-  const getCurrencyFromSymbol = (symbol: string): string => { /* ...内容は変更なし... */ };
-  const convertCurrency = (amount: number, fromCurrency: string, toCurrency: string): number => { /* ...内容は変更なし... */ };
-  const getExchangeRateDisplay = () => { /* ...内容は変更なし... */ };
-  
-  // --- レンダリング部分 ---
-  const renderContent = () => {
-    // ... (内容はほぼ変更なし)
+  const getCurrencyFromSymbol = (symbol: string): string => {
+      const map: { [key: string]: string } = { '¥': 'JPY', '$': 'USD', '€': 'EUR', '£': 'GBP', '₩': 'KRW' };
+      return map[symbol] || symbol;
   };
+
+  const getExchangeRateDisplay = () => {
+    if (!rates || !localCurrency || !homeCurrency) return null;
+    const rate = getExchangeRate(localCurrency, homeCurrency);
+    return (
+        <div className="exchange-rate-display">
+            {rate ? `1 ${localCurrency} ≈ ${rate.toFixed(2)} ${homeCurrency}` : 'レート情報なし'}
+        </div>
+    );
+  };
+  
+  // 通貨オプションを生成
+  const currencyOptions = rates ? ['USD', 'EUR', 'JPY', 'GBP', ...Object.keys(rates).flatMap(pair => pair.split('/'))].filter((v, i, a) => a.indexOf(v) === i) : ['USD', 'EUR', 'JPY'];
 
   return (
     <div className="app-container">
-      {banner && (
-        <div className={`error-banner ${banner.type}`}>
-          <p>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      {/* ... (JSXの構造はほぼ変更なし、イベントハンドラや値をストアのものに置き換え) ... */}
+      <div className="top-section">
+        {banner && (
+          <div className={`banner ${banner.type}`}>
             {banner.message}
-          </p>
-          <button onClick={() => setBanner(null)} aria-label="Dismiss error message">&times;</button>
-        </div>
-      )}
-      {isAnalyzing && (
-        <div className="analyzing-indicator">
-          <div className="analyzing-spinner"></div>
-          <span>Analyzing data...</span>
-        </div>
-      )}
-      
-      <video id="video-feed" ref={videoRef} autoPlay playsInline muted />
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
-      
-      {status === 'loading' && (
-        <div className="status-overlay">
-          <div className="loader"></div>
-          <p>カメラを起動し、為替レートを取得しています...</p>
-        </div>
-      )}
-      {status === 'error' && (
-        <div className="status-overlay">
-          <h2>エラーが発生しました</h2>
-          {/* バナーメッセージを直接表示 */}
-          <p>{banner?.message}</p>
-        </div>
-      )}
-      {status === 'running' && (
-        <>
-          <div className="overlay-container">
-            {detections.map((detection, index) => {
-              const detectedCurrency = detection.currency ? getCurrencyFromSymbol(detection.currency) : (localCurrency || 'JPY');
-              const convertedAmount = rates && homeCurrency && detectedCurrency ? convertCurrency(detection.amount, detectedCurrency, homeCurrency) : 0;
-              return (
-                <div key={index} className="detection-box" style={{ left: `${detection.boundingBox.x}%`, top: `${detection.boundingBox.y}%`, width: `${detection.boundingBox.width}%`, height: `${detection.boundingBox.height}%` }}>
-                  <div className="converted-amount">{formatCurrency(convertedAmount, homeCurrency)}</div>
-                  <div className="original-price">{formatCurrency(detection.amount, detectedCurrency)}</div>
-                </div>
-              );
-            })}
+            <button onClick={() => setBanner(null)}>×</button>
           </div>
-          {rates && (
-            <div className="controls">
-              <div className="currency-settings">
-                <div className="currency-selector">
-                  <label htmlFor="home-currency">自国通貨:</label>
-                  <select id="home-currency" value={homeCurrency} onChange={(e) => setHomeCurrency(e.target.value)}>
-                    {/* レートの通貨ペアから通貨リストを生成 */}
-                    {Object.keys(rates).flatMap(pair => pair.split('/')).filter((v, i, a) => a.indexOf(v) === i).sort().map(currency => (
-                      <option key={currency} value={currency}>{currency}</option>
-                    ))}
-                  </select>
-                </div>
-                {getExchangeRateDisplay()}
-                <div className="currency-selector">
-                  <label htmlFor="local-currency">現地通貨:</label>
-                  <select id="local-currency" value={localCurrency} onChange={(e) => setLocalCurrency(e.target.value)}>
-                    <option value="">選択してください</option>
-                    {Object.keys(rates).flatMap(pair => pair.split('/')).filter((v, i, a) => a.indexOf(v) === i).sort().map(currency => (
-                      <option key={currency} value={currency}>{currency}</option>
-                    ))}
-                  </select>
-                </div>
+        )}
+      </div>
+
+      <div className="middle-section">
+        <video ref={videoRef} autoPlay playsInline className="video-feed" />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+        <div className="overlay-container">
+          {detections.map((detection, index) => {
+            const detectedCurrency = detection.currency ? getCurrencyFromSymbol(detection.currency) : localCurrency;
+            if (!detectedCurrency) return null;
+            const convertedAmount = convertCurrency(detection.amount, detectedCurrency, homeCurrency);
+            return (
+              <div key={index} className="detection-box" style={{ left: `${detection.boundingBox.x}%`, top: `${detection.boundingBox.y}%`, width: `${detection.boundingBox.width}%`, height: `${detection.boundingBox.height}%` }}>
+                <div className="converted-amount">{formatCurrency(convertedAmount, homeCurrency)}</div>
+                <div className="original-price">{formatCurrency(detection.amount, detectedCurrency)}</div>
               </div>
-              <button onClick={togglePause} className="pause-button" aria-label={isPaused ? 'スキャンを再開' : 'スキャンを一時停止'}>
-                {isPaused ? <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>}
-              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bottom-section">
+        <div className="controls">
+          <div className="status-bar">{status === 'loading' ? '読込中...' : status === 'error' ? 'エラー' : `検出中... (${homeCurrency})`}</div>
+          <div className="currency-settings">
+            <div className="currency-selector">
+              <label htmlFor="home-currency">自国通貨:</label>
+              <select id="home-currency" value={homeCurrency} onChange={(e) => setHomeCurrency(e.target.value)}>
+                {currencyOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
-          )}
-        </>
-      )}
+            {getExchangeRateDisplay()}
+            <div className="currency-selector">
+              <label htmlFor="local-currency">現地通貨:</label>
+              <select id="local-currency" value={localCurrency} onChange={(e) => setLocalCurrency(e.target.value)}>
+                {currencyOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <button onClick={() => setIsPaused(!isPaused)} className="pause-button" aria-label={isPaused ? 'スキャンを再開' : 'スキャンを一時停止'}>
+            {isPaused ? 
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> : 
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            }
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
-root.render(<App />);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);

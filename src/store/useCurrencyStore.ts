@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { apiClient } from '../api/client'; // apiClientをインポート
+import { apiClient, RateData } from '../api/client'; // apiClientをインポート
 
 // バナーの型定義
 interface Banner {
@@ -18,7 +18,7 @@ interface Detection {
 interface CurrencyState {
   status: 'loading' | 'running' | 'error';
   banner: Banner | null;
-  rates: Record<string, number> | null;
+  rates: RateData['rates'] | null; 
   homeCurrency: string;
   localCurrency: string;
   detections: Detection[];

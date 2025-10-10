@@ -1,0 +1,25 @@
+# Dependencies
+/node_modules
+/dist
+
+# Env files
+.env*
+!.env.example
+
+# Firebase
+.firebase/
+firebase-debug.log
+database-debug.log
+
+# IDE config
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
