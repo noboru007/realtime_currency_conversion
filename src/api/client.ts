@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
 // API クライアント設定
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://us-central1-realtime-currency-converter.cloudfunctions.net';
+// firebase.json の rewrites を使うため、API_BASE_URL は空文字にする
+const API_BASE_URL = '';
 
 export interface DetectionRequest {
   image_data: string;
