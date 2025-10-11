@@ -23,9 +23,16 @@ export interface DetectionResponse {
   error?: string;
 }
 
+export interface Rate {
+  bid: number;
+  ask: number;
+}
+
 export interface RateData {
-  rates: { [currency: string]: number };
-  timestamp: string;
+  rates: { [pair: string]: Rate };
+  timestamp_unix: number;
+  timestamp_jst: string;
+  base_currency: string;
 }
 
 export interface ConversionRequest {
@@ -106,4 +113,24 @@ export const apiClient = {
 
     return response.json();
   },
+
+  // 緯度・経度から現地通貨コード取得
+  async getCurrencyFromLocation(lat: number, lon: number): Promise<{ currency_code: string }> {
+    const response = await fetch(`${API_BASE_URL}/getCurrencyFromLocation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ lat, lon }),
+    });
+    if (!response.ok) {
+      throw new Error('API request failed');
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get currency from location');
+    }
+    return data;
+  },
+
 };
