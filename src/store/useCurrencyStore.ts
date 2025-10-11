@@ -1,5 +1,6 @@
+import React from 'react'; // Reactをインポート
 import { create } from 'zustand';
-import { apiClient, RateData } from '../api/client'; // apiClientをインポート
+import { apiClient, RateData } from '../api/client';
 
 // バナーの型定義
 interface Banner {
@@ -18,6 +19,8 @@ interface Detection {
 interface CurrencyState {
   status: 'loading' | 'running' | 'error';
   banner: Banner | null;
+  debugMessage: string | null;
+  isPaused: boolean;
   rates: RateData['rates'] | null; 
   homeCurrency: string;
   localCurrency: string;
@@ -26,6 +29,8 @@ interface CurrencyState {
   // 状態を更新するためのアクション
   setStatus: (status: 'loading' | 'running' | 'error') => void;
   setBanner: (banner: Banner | null) => void;
+  setDebugMessage: (message: string | null) => void;
+  setIsPaused: (isPaused: boolean) => void;
   setHomeCurrency: (currency: string) => void;
   setLocalCurrency: (currency: string) => void;
   setDetections: (detections: Detection[]) => void;
@@ -39,6 +44,8 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   // --- 初期状態 ---
   status: 'loading',
   banner: null,
+  debugMessage: null,
+  isPaused: false,
   rates: null,
   homeCurrency: 'USD',
   localCurrency: '',
@@ -47,6 +54,8 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   // --- 状態更新アクション ---
   setStatus: (status) => set({ status }),
   setBanner: (banner) => set({ banner }),
+  setDebugMessage: (message) => set({ debugMessage: message }), 
+  setIsPaused: (isPaused) => set({ isPaused }),
   setHomeCurrency: (currency) => set({ homeCurrency: currency }),
   setLocalCurrency: (currency) => set({ localCurrency: currency }),
   setDetections: (detections) => set({ detections }),
