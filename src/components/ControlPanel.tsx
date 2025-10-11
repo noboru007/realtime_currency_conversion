@@ -1,30 +1,59 @@
 import React from 'react';
 import { useCurrencyStore } from '../store/useCurrencyStore';
-import { getExchangeRate } from '../utils/currency';
+import { getExchangeRate } from '../utils/currency'; // getExchangeRateをインポート
 
 interface ControlPanelProps {
   currencyOptions: string[];
 }
 
-// レート表示部分を別のコンポーネントとして切り出す（オプション）
+// --- ▼▼▼ 新しいコンポーネント ▼▼▼ ---
 const ExchangeRateDisplay: React.FC = () => {
   const { rates, homeCurrency, localCurrency } = useCurrencyStore();
   
-  if (!rates || !localCurrency || !homeCurrency) return null;
-  const rate = getExchangeRate(localCurrency, homeCurrency, rates);
+  // レート計算に必要な情報が揃っていない場合は何も表示しない
+  if (!rates || !localCurrency || !homeCurrency || localCurrency === homeCurrency) {
+    return null;
+  }
+
+  // 現地通貨 -> 自国通貨 のレートを取得
+  const localToHomeRateInfo = getExchangeRate(localCurrency, homeCurrency, rates);
+  // 自国通貨 -> 現地通貨 のレートを取得
+  const homeToLocalRateInfo = getExchangeRate(homeCurrency, localCurrency, rates);
+
+  if (!localToHomeRateInfo || !homeToLocalRateInfo) {
+    return <div className="exchange-rate-display">レート情報なし</div>;
+  }
+
+  // ユーザーは現地通貨を売る -> Bidレートが適用される
+  const localToHomeRate = localToHomeRateInfo.bid;
+  // ユーザーは自国通貨を売る -> Bidレートが適用される
+  const homeToLocalRate = homeToLocalRateInfo.bid;
+
+  // JPYなど低額通貨の場合、表示桁数を調整する
+  const getAdjustedRate = (baseCurrency: string, rate: number) => {
+    if (['JPY', 'KRW', 'VND'].includes(baseCurrency)) {
+      return { unit: 100, value: (rate * 100).toFixed(2) };
+    }
+    return { unit: 1, value: rate.toFixed(4) };
+  };
+
+  const localRateDisplay = getAdjustedRate(localCurrency, localToHomeRate);
+  const homeRateDisplay = getAdjustedRate(homeCurrency, homeToLocalRate);
 
   return (
     <div className="exchange-rate-display">
-      {rate ? `1 ${localCurrency} ≈ ${rate.toFixed(2)} ${homeCurrency}` : 'レート情報なし'}
+      <span>{localRateDisplay.unit} {localCurrency} ≈ {localRateDisplay.value} {homeCurrency}</span>
+      <span>{homeRateDisplay.unit} {homeCurrency} ≈ {homeRateDisplay.value} {localCurrency}</span>
     </div>
   );
 };
+// --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions }) => {
-  // isPaused, setIsPaused, debugMessage をストアから直接取得
   const { status, homeCurrency, localCurrency, setHomeCurrency, setLocalCurrency, isPaused, setIsPaused, debugMessage } = useCurrencyStore();
 
   const getStatusMessage = () => {
+    // ... (変更なし)
     if (isPaused) {
       return '一時停止中';
     }
@@ -39,8 +68,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions }) =
     <div className="bottom-section">
       <div className="controls">
         <div className="status-bar">
-        <span>{getStatusMessage()}</span>
-          {/* デバッグメッセージをここに追加 */}
+          <span>{getStatusMessage()}</span>
           {debugMessage && <span className="debug-message">{debugMessage}</span>}
         </div>
         <div className="currency-settings">
@@ -50,6 +78,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions }) =
               {currencyOptions.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
+          {/* ▼▼▼ ここにレート表示コンポーネントを挿入 ▼▼▼ */}
           <ExchangeRateDisplay />
           <div className="currency-selector">
             <label htmlFor="local-currency">現地通貨:</label>

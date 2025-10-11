@@ -27,6 +27,25 @@ const App: React.FC = () => {
     const initialize = async () => {
       setStatus('loading');
       startCamera();
+      // --- ▼▼▼ 位置情報取得ロジックを追加 ▼▼▼ ---
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const data = await apiClient.getCurrencyFromLocation(latitude, longitude);
+            if (data.currency_code) {
+              setLocalCurrency(data.currency_code);
+              console.log(`Local currency set to ${data.currency_code} based on location.`);
+            }
+          } catch (error) {
+            console.warn('Could not determine currency from location.', error);
+            // 位置情報から通貨を特定できなくても、エラーにはしない
+          }
+        }, (error) => {
+          console.warn('Could not get geolocation.', error);
+          setBanner({ message: '位置情報の取得に失敗しました。現地通貨は手動で設定してください。', type: 'warning' });
+        });
+      }
       await fetchRates();
       setStatus('running');
     };
@@ -42,7 +61,7 @@ const App: React.FC = () => {
           videoRef.current.srcObject = stream;
           // カメラが再生を開始したらスキャンループを開始
           videoRef.current.oncanplay = () => {
-            setIsPaused(false); // 自動的にスキャン開始
+            // setIsPaused(false); // この行を削除またはコメントアウト
             scanLoop();
           };
         }
@@ -64,7 +83,7 @@ const App: React.FC = () => {
     // 処理が完了、もしくはPause中だった場合、次のループをスケジュールする
     // Pause中は200msごとに状態をチェックし、復帰に素早く反応できるようにする
     // 次のループをスケジュールする際も、ストアから最新の状態を取得します
-    const delay = useCurrencyStore.getState().isPaused ? 500 : 5000; 
+    const delay = useCurrencyStore.getState().isPaused ? 200 : 5000; 
     setTimeout(scanLoop, delay);
   };
 

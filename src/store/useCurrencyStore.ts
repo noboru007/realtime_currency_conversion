@@ -21,7 +21,7 @@ interface CurrencyState {
   banner: Banner | null;
   debugMessage: string | null;
   isPaused: boolean;
-  rates: RateData['rates'] | null; 
+  rates: RateData['rates'] | null; // 型を更新
   homeCurrency: string;
   localCurrency: string;
   detections: Detection[];
@@ -45,7 +45,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   status: 'loading',
   banner: null,
   debugMessage: null,
-  isPaused: false,
+  isPaused: true, // 初期状態を一時停止に設定
   rates: null,
   homeCurrency: 'USD',
   localCurrency: '',
@@ -64,21 +64,34 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   fetchRates: async () => {
     try {
       const data = await apiClient.getExchangeRates();
-      set({ rates: data.rates });
-      localStorage.setItem('cachedRates', JSON.stringify(data.rates));
-      
-      // デフォルトの自国通貨を設定するロジック
-      if (!data.rates['USD'] && Object.keys(data.rates).length > 0) {
-        set({ homeCurrency: Object.keys(data.rates)[0] });
+      // レスポンスの構造が変わったため、 'USD' が存在するかどうかでチェック
+      if (data.rates && data.base_currency === 'USD') {
+        set({ rates: data.rates });
+        localStorage.setItem('cachedRates', JSON.stringify(data.rates));
+        set({ banner: null }); // 成功したら過去の警告バナーを消す
+      } else {
+        // もし古い形式のキャッシュが残っていた場合に備える
+        throw new Error('Fetched rates data is not in the expected format.');
       }
-      set({ banner: null }); // 成功したら過去の警告バナーを消す
     } catch (error) {
       console.warn('Failed to fetch new rates, attempting to load from cache.', error);
       const cachedRatesJson = localStorage.getItem('cachedRates');
       if (cachedRatesJson) {
-        const cachedRates = JSON.parse(cachedRatesJson) as Record<string, number>;
-        set({ rates: cachedRates });
-        set({ banner: { message: '為替レートの取得に失敗。前回保存したデータを使用しています。', type: 'warning' } });
+        try {
+            const cachedRates = JSON.parse(cachedRatesJson);
+            // 簡単なキャッシュの形式チェック
+            const firstKey = Object.keys(cachedRates)[0];
+            if (firstKey && cachedRates[firstKey].hasOwnProperty('bid')) {
+              set({ rates: cachedRates });
+              set({ banner: { message: '為替レートの取得に失敗。前回保存したデータを使用しています。', type: 'warning' } });
+            } else {
+                // 古い形式のキャッシュは使えないのでエラーとする
+                localStorage.removeItem('cachedRates');
+                throw new Error('Cached rates data is outdated format.');
+            }
+        } catch (cacheError) {
+          set({ status: 'error', banner: { message: '為替レートの取得に失敗し、保存されたデータもありません。', type: 'error' } });
+        }
       } else {
         set({ status: 'error', banner: { message: '為替レートの取得に失敗し、保存されたデータもありません。', type: 'error' } });
       }
