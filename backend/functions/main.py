@@ -1,28 +1,20 @@
 from firebase_functions import https_fn, options
-from firebase_functions.options import set_global_options
-from firebase_admin import initialize_app
-import google.generativeai as genai
-import requests
-import json
-import base64
+# from firebase_admin import initialize_app
 import os
-from io import BytesIO
-from PIL import Image
-from dotenv import load_dotenv
+import json
+import requests
+import traceback
 
-# 環境変数を読み込み (ローカルテスト用)
-load_dotenv()
-
-set_global_options(max_instances=10)
-initialize_app()
-
+# initialize_app() # v2では不要なためコメントアウト
 
 @https_fn.on_request(
     cors=options.CorsOptions(
         cors_origins=["*"],
         cors_methods=["get", "post", "options"]
     ),
-    secrets=["GEMINI_API_KEY"]
+    secrets=["GEMINI_API_KEY"],
+    memory=options.MemoryOption.GB_1,
+    timeout_sec=120  # 関数のタイムアウトも念のため延長
 )
 def detectPrices(req: https_fn.Request) -> https_fn.Response:
     """価格を検出するFirebase Function"""
@@ -82,11 +74,11 @@ def detectPrices(req: https_fn.Request) -> https_fn.Response:
             ]
         }
 
-        # 正しいモデル名 'gemini-2.5-flash' と APIバージョン 'v1beta' を使用
+        # ▼▼▼ モデル名を gemini-pro-vision に変更 ▼▼▼
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
         
-        gemini_response = requests.post(url, headers=headers, json=request_body, timeout=30)
+        gemini_response = requests.post(url, headers=headers, json=request_body, timeout=55)
         gemini_response.raise_for_status()
 
         response_data = gemini_response.json()

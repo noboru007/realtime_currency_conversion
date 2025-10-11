@@ -407,3 +407,24 @@ html, body, #root {
 .file-upload-button:hover {
   background: var(--accent-color);
 }
+
+.banner.debug {
+  background-color: #333;
+  color: #0f0; /* 緑色の文字 */
+  font-family: monospace;
+}
+
+.status-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.debug-message {
+  color: #0f0; /* 緑色 */
+  font-family: monospace;
+  font-size: 0.75em;
+  margin-top: 2px;
+  opacity: 0.8;
+}
