@@ -3,10 +3,11 @@ import ReactDOM from 'react-dom/client';
 import './index.css'; // CSSのインポート
 import { apiClient } from './src/api/client';
 import { useCurrencyStore } from './src/store/useCurrencyStore'; // Zustandストアをインポート
-import { NotificationBanner } from './src/components/NotificationBanner'; // 新しくインポート
+import { NotificationBanner } from './src/components/NotificationBanner';
 import { convertCurrency, formatCurrency, getCurrencyFromSymbol, getExchangeRate } from './src/utils/currency';
-import { CameraView } from './src/components/CameraView'; // 新しくインポート
-import { ControlPanel } from './src/components/ControlPanel'; // 新しくインポート
+import { CameraView } from './src/components/CameraView';
+import { ControlPanel } from './src/components/ControlPanel';
+import { localeCurrencyMetadata } from './src/utils/currency';
 
 const App: React.FC = () => {
   const {
@@ -25,32 +26,54 @@ const App: React.FC = () => {
   // --- 初期化処理 ---
   useEffect(() => {
     const initialize = async () => {
-      setStatus('loading');
+      setStatus('loading');// <-- 初期化処理が終わるまでUIは操作不可になる
       startCamera();
+      // --- ▼▼▼ 自国通貨設定ロジックをライブラリ使用に書き換え ▼▼▼ ---
+      try {
+        const userLocale = navigator.language; // 例: "ja-JP"
+        const localeInfo = localeCurrencyMetadata[userLocale];
+        
+        if (localeInfo) {
+          setHomeCurrency(localeInfo.currency);
+          console.log(`Home currency set to ${localeInfo.currency} based on browser locale ${userLocale}.`);
+        } else {
+          // マップにない場合はUSDをデフォルトに設定
+          setHomeCurrency('USD');
+          console.warn(`No currency mapping found for locale: ${userLocale}. Defaulting to USD.`);
+        }
+      } catch (error) {
+        console.warn('Could not determine home currency from locale. Defaulting to USD.', error);
+        setHomeCurrency('USD'); // エラー時もUSDをデフォルトに
+      }
       // --- ▼▼▼ 位置情報取得ロジックを追加 ▼▼▼ ---
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(async (position) => {
-          try {
-            const { latitude, longitude } = position.coords;
-            const data = await apiClient.getCurrencyFromLocation(latitude, longitude);
-            if (data.currency_code) {
-              setLocalCurrency(data.currency_code);
-              console.log(`Local currency set to ${data.currency_code} based on location.`);
-            }
-          } catch (error) {
-            console.warn('Could not determine currency from location.', error);
-            // 位置情報から通貨を特定できなくても、エラーにはしない
+      const getLocation = (): Promise<GeolocationPosition> => {
+        return new Promise((resolve, reject) => {
+          if (!navigator.geolocation) {
+            return reject(new Error('Geolocation is not supported.'));
           }
-        }, (error) => {
-          console.warn('Could not get geolocation.', error);
-          setBanner({ message: '位置情報の取得に失敗しました。現地通貨は手動で設定してください。', type: 'warning' });
+          navigator.geolocation.getCurrentPosition(resolve, reject);
         });
+      };
+
+      try {
+        const position = await getLocation();
+        const { latitude, longitude } = position.coords;
+        const data = await apiClient.getCurrencyFromLocation(latitude, longitude);
+        if (data.currency_code) {
+          setLocalCurrency(data.currency_code);
+          console.log(`Local currency set to ${data.currency_code} based on location.`);
+        }
+      } catch (error) {
+        // ユーザーが許可しなかった場合(Permission denied)や、その他のエラーの場合
+        console.warn('Could not get geolocation or determine currency from it.', error);
+        setBanner({ message: '位置情報から現地通貨を自動設定できませんでした。手動で設定してください。', type: 'warning' });
       }
       await fetchRates();
-      setStatus('running');
+      // すべての初期化処理が完了
+      setStatus('running'); // <-- この時点でUIが操作可能になる
     };
     initialize();
-  }, [fetchRates, setStatus]);
+  }, [fetchRates, setStatus, setLocalCurrency, setBanner, setHomeCurrency]); // 依存配列を元に戻します
 
   // カメラ起動ロジック
   const startCamera = async () => {
@@ -83,7 +106,7 @@ const App: React.FC = () => {
     // 処理が完了、もしくはPause中だった場合、次のループをスケジュールする
     // Pause中は200msごとに状態をチェックし、復帰に素早く反応できるようにする
     // 次のループをスケジュールする際も、ストアから最新の状態を取得します
-    const delay = useCurrencyStore.getState().isPaused ? 200 : 5000; 
+    const delay = useCurrencyStore.getState().isPaused ? 200 : 1000; 
     setTimeout(scanLoop, delay);
   };
 
@@ -142,17 +165,34 @@ const App: React.FC = () => {
     }
   };
   
-  // 通貨オプションを生成
-  const currencyOptions = rates ? ['USD', 'EUR', 'JPY', 'GBP', ...Object.keys(rates).flatMap(pair => pair.split('/'))].filter((v, i, a) => a.indexOf(v) === i) : ['USD', 'EUR', 'JPY'];
+  // 通貨ドロップダウンリストの選択肢を生成
+  const priorityCurrencies = [
+    'EUR', 'GBP', 'USD', 'JPY', 
+    'CNY', 'HKD', 'IDR', 'INR', 'KRW', 'MYR', 
+    'PHP', 'SGD', 'THB', 'TWD', 'VND'
+  ].sort();
+  
+  const allCurrencies = rates 
+    ? [...new Set(Object.keys(rates).flatMap(pair => pair.split('/')))] 
+    : [];
 
-  return (
-    <div className="app-container">
-      <NotificationBanner /> 
-      <CameraView videoRef={videoRef} canvasRef={canvasRef} />
-      <ControlPanel currencyOptions={currencyOptions} />
-    </div>
-  );
-};
+  const otherCurrencies = allCurrencies
+    .filter(c => !priorityCurrencies.includes(c))
+    .sort();
+
+  const currencyOptions = rates 
+    ? [...priorityCurrencies, ...otherCurrencies]
+    : ['USD', 'EUR', 'JPY'];
+
+    return (
+      <div className="app-container">
+        <NotificationBanner /> 
+        <CameraView videoRef={videoRef} canvasRef={canvasRef} />
+        <ControlPanel currencyOptions={currencyOptions} />
+      </div>
+    );
+  };
+  
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(
