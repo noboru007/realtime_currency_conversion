@@ -4,10 +4,12 @@ import './index.css'; // CSSのインポート
 import { apiClient } from './src/api/client';
 import { useCurrencyStore } from './src/store/useCurrencyStore'; // Zustandストアをインポート
 import { NotificationBanner } from './src/components/NotificationBanner';
-import { convertCurrency, formatCurrency, getCurrencyFromSymbol, getExchangeRate } from './src/utils/currency';
+// import { convertCurrency, formatCurrency, getCurencyFromSymbol, getExchangeRate } from './src/utils/currency';
+import { formatCurrency, getExchangeRate } from './src/utils/currency';
 import { CameraView } from './src/components/CameraView';
 import { ControlPanel } from './src/components/ControlPanel';
 import { localeCurrencyMetadata } from './src/utils/currency';
+import { useTranslationStore } from './src/store/useTranslationStore'; // ← 追加
 
 const App: React.FC = () => {
   const {
@@ -16,6 +18,8 @@ const App: React.FC = () => {
     setHomeCurrency, setLocalCurrency, setDetections,
     fetchRates
   } = useCurrencyStore();
+
+  const { t } = useTranslationStore(); // ← t関数を取得
 
   // const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
@@ -28,24 +32,9 @@ const App: React.FC = () => {
     const initialize = async () => {
       setStatus('loading');// <-- 初期化処理が終わるまでUIは操作不可になる
       startCamera();
-      // --- ▼▼▼ 自国通貨設定ロジックをライブラリ使用に書き換え ▼▼▼ ---
-      try {
-        const userLocale = navigator.language; // 例: "ja-JP"
-        const localeInfo = localeCurrencyMetadata[userLocale];
-        
-        if (localeInfo) {
-          setHomeCurrency(localeInfo.currency);
-          console.log(`Home currency set to ${localeInfo.currency} based on browser locale ${userLocale}.`);
-        } else {
-          // マップにない場合はUSDをデフォルトに設定
-          setHomeCurrency('USD');
-          console.warn(`No currency mapping found for locale: ${userLocale}. Defaulting to USD.`);
-        }
-      } catch (error) {
-        console.warn('Could not determine home currency from locale. Defaulting to USD.', error);
-        setHomeCurrency('USD'); // エラー時もUSDをデフォルトに
-      }
-      // --- ▼▼▼ 位置情報取得ロジックを追加 ▼▼▼ ---
+
+      // --- 1. 現地通貨を先に決定する ---
+      let detectedLocalCurrency: string | null = null;
       const getLocation = (): Promise<GeolocationPosition> => {
         return new Promise((resolve, reject) => {
           if (!navigator.geolocation) {
@@ -60,20 +49,45 @@ const App: React.FC = () => {
         const { latitude, longitude } = position.coords;
         const data = await apiClient.getCurrencyFromLocation(latitude, longitude);
         if (data.currency_code) {
+          detectedLocalCurrency = data.currency_code; // 後で比較するために変数に格納
           setLocalCurrency(data.currency_code);
           console.log(`Local currency set to ${data.currency_code} based on location.`);
         }
       } catch (error) {
         // ユーザーが許可しなかった場合(Permission denied)や、その他のエラーの場合
         console.warn('Could not get geolocation or determine currency from it.', error);
-        setBanner({ message: '位置情報から現地通貨を自動設定できませんでした。手動で設定してください。', type: 'warning' });
+        setBanner({ message: t('geolocationCurrencyFailed'), type: 'warning' });
       }
+
+      // --- 2. 自国通貨を決定する (現地通貨との重複チェック付き) ---
+      try {
+        const userLocale = navigator.language; // 例: "ja-JP"
+        const localeInfo = localeCurrencyMetadata[userLocale];
+        let potentialHomeCurrency = 'USD'; // デフォルトはUSD
+
+        if (localeInfo) {
+          potentialHomeCurrency = localeInfo.currency;
+        }
+
+        // 現地通貨とロケール基点の自国通貨が同じ場合は、自国通貨をUSDにする
+        if (detectedLocalCurrency && potentialHomeCurrency === detectedLocalCurrency) {
+          setHomeCurrency('USD');
+          console.log(`Home currency derived from locale (${potentialHomeCurrency}) is the same as the local currency. Defaulting home currency to USD.`);
+        } else {
+          setHomeCurrency(potentialHomeCurrency);
+          console.log(`Home currency set to ${potentialHomeCurrency} based on browser locale ${userLocale}.`);
+        }
+      } catch (error) {
+        console.warn('Could not determine home currency from locale. Defaulting to USD.', error);
+        setHomeCurrency('USD'); // エラー時もUSDをデフォルトに
+      }
+
       await fetchRates();
       // すべての初期化処理が完了
       setStatus('running'); // <-- この時点でUIが操作可能になる
     };
     initialize();
-  }, [fetchRates, setStatus, setLocalCurrency, setBanner, setHomeCurrency]); // 依存配列を元に戻します
+  }, [fetchRates, setStatus, setLocalCurrency, setBanner, setHomeCurrency, t]); // ← 依存配列に t を追加
 
   // カメラ起動ロジック
   const startCamera = async () => {
@@ -92,7 +106,7 @@ const App: React.FC = () => {
         throw new Error('Camera not supported.');
       }
     } catch (error) {
-      setBanner({ message: 'カメラアクセスに失敗。ページをリロードするか、設定を確認してください。', type: 'error' });
+      setBanner({ message: t('cameraAccessFailed'), type: 'error' }); // ← ここで翻訳
       setStatus('error');
     }
   };
@@ -151,14 +165,21 @@ const App: React.FC = () => {
       //const imageData = canvas.toDataURL('image/jpeg');
       const imageData = canvas.toDataURL('image/jpeg', 0.7); // 第2引数で画質を70%に指定
       const response = await apiClient.detectPrices(imageData, homeCurrency);
-      setDebugMessage(`API response received. Detections: ${response.detections.length}`); // API応答受信ログ
-      setDetections(response.detections);
-      // 成功したらエラーバナーを消す
-      if (banner?.type === 'error') setBanner(null);
+      // ▼▼▼ タイムアウト警告のハンドリングロジックを追加 ▼▼▼
+      if (response.warning === 'API_TIMEOUT') {
+        setBanner({ message: t('priceDetectionTimeout'), type: 'warning' });
+      } else if (banner?.type === 'error' || banner?.type === 'warning') {
+        // 正常に成功した場合、以前のエラーや警告バナーを消す
+        setBanner(null);
+      }
+
+      setDebugMessage(`API response received. Detections: ${response.detections.length}`);
+      setDetections(response.detections); // タイムアウト時は空の配列がセットされる
+
     } catch (error) {
       console.error('Error detecting prices:', error);
       setDebugMessage('API request failed.'); // APIエラーログ
-      setBanner({ message: '価格の検出中にAPIエラーが発生しました。', type: 'error' });
+      setBanner({ message: t('priceDetectionError'), type: 'error' }); // ← ここで翻訳
       setDetections([]);
     } finally {
       setIsAnalyzing(false);
@@ -186,7 +207,7 @@ const App: React.FC = () => {
 
     return (
       <div className="app-container">
-        <NotificationBanner /> 
+        {/* <NotificationBanner />  */}
         <CameraView videoRef={videoRef} canvasRef={canvasRef} />
         <ControlPanel currencyOptions={currencyOptions} />
       </div>

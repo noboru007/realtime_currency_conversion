@@ -1,6 +1,7 @@
 import React from 'react';
 import { useCurrencyStore } from '../store/useCurrencyStore';
-import { convertCurrency, formatCurrency, getCurrencyFromSymbol } from '../utils/currency';
+// import { convertCurrency, formatCurrency, getCurrencyFromSymbol } from '../utils/currency';
+import { formatCurrency } from '../utils/currency';
 
 interface CameraViewProps {
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -8,7 +9,7 @@ interface CameraViewProps {
 }
 
 export const CameraView: React.FC<CameraViewProps> = ({ videoRef, canvasRef }) => {
-  const { detections, rates, homeCurrency, localCurrency } = useCurrencyStore();
+  const { detections, homeCurrency, localCurrency, localToHomeRate } = useCurrencyStore();
 
   return (
     <div className="middle-section">
@@ -17,8 +18,6 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef, canvasRef }) =
         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
         {detections.map((detection, index) => {
-          // 常にユーザーが選択した localCurrency を変換元とする
-          const currencyToConvertFrom = localCurrency;
         
           // let currencyToConvertFrom = '';
           // const detectedSymbol = detection.currency || '';
@@ -47,19 +46,15 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef, canvasRef }) =
           // }
           // // --- ▲▲▲ ここまで ▲▲▲ ---
 
-          const convertedAmount = convertCurrency(detection.amount, currencyToConvertFrom, homeCurrency, rates);
-
-          if (currencyToConvertFrom && currencyToConvertFrom === homeCurrency) {
-            return null;
-          }
+          const convertedAmount = (detection.amount * localToHomeRate)
 
           const convertedDisplay = convertedAmount !== 0 
             ? formatCurrency(convertedAmount, homeCurrency)
             : `${homeCurrency} --.--`;
 
-          const originalDisplay = currencyToConvertFrom
-            ? formatCurrency(detection.amount, currencyToConvertFrom)
-            : detection.amount.toFixed(2);
+          const originalDisplay = localCurrency
+            ? formatCurrency(detection.amount, localCurrency)
+            : detection.amount;
 
           const overlayStyle: React.CSSProperties = {
             left: `${detection.boundingBox.x}%`,

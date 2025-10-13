@@ -21,6 +21,8 @@ interface CurrencyState {
   banner: Banner | null;
   debugMessage: string | null;
   isPaused: boolean;
+  localToHomeRate: number | null; // ← この行を追加
+  homeToLocalRate: number | null; // ← この行を追加
   rates: RateData['rates'] | null; // 型を更新
   homeCurrency: string;
   localCurrency: string;
@@ -37,6 +39,7 @@ interface CurrencyState {
   
   // データ取得などの非同期アクション
   fetchRates: () => Promise<void>;
+  setCalculatedRates: (rates: { localToHome: number | null, homeToLocal: number | null }) => void; // ← この行を追加
 }
 
 // ストアを作成
@@ -46,6 +49,8 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   banner: null,
   debugMessage: null,
   isPaused: true, // 初期状態を一時停止に設定
+  localToHomeRate: null, // ← この行を追加
+  homeToLocalRate: null, // ← この行を追加
   rates: null,
   homeCurrency: 'USD',
   localCurrency: '',
@@ -83,18 +88,19 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
             const firstKey = Object.keys(cachedRates)[0];
             if (firstKey && cachedRates[firstKey].hasOwnProperty('bid')) {
               set({ rates: cachedRates });
-              set({ banner: { message: '為替レートの取得に失敗。前回保存したデータを使用しています。', type: 'warning' } });
+              set({ banner: { message: 'rateFetchFailedCacheUsed', type: 'warning' } }); // t() を外してキーを直接渡す
             } else {
                 // 古い形式のキャッシュは使えないのでエラーとする
                 localStorage.removeItem('cachedRates');
                 throw new Error('Cached rates data is outdated format.');
             }
         } catch (cacheError) {
-          set({ status: 'error', banner: { message: '為替レートの取得に失敗し、保存されたデータもありません。', type: 'error' } });
+          set({ status: 'error', banner: { message: 'rateFetchFailedNoCache', type: 'error' } }); // t() を外してキーを直接渡す
         }
       } else {
-        set({ status: 'error', banner: { message: '為替レートの取得に失敗し、保存されたデータもありません。', type: 'error' } });
+        set({ status: 'error', banner: { message: 'rateFetchFailedNoCache', type: 'error' } });
       }
     }
   },
+  setCalculatedRates: (rates) => set({ localToHomeRate: rates.localToHome, homeToLocalRate: rates.homeToLocal }), // ← この行を追加
 }));

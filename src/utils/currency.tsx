@@ -2,28 +2,28 @@ import { RateData } from '../api/client';
 
 /**
  * 2つの通貨間の為替レート（Bid/Ask）を取得します。
- * @param from 売る通貨 (例: 'JPY', 'GBP')
- * @param to 買う通貨 (例: 'USD')
+ * @param quoted 値段が付いている通貨 (例: 1USD=100の時の'USD', 100JPY=1USDの時の'JPY')
+ * @param quoting quoted通貨に値段を付ける通貨 (例: 1USD=100の時の'JPY', 100JPY=1USDの時の'USD')
  * @param rates レート情報オブジェクト (USDが基準)
  * @returns { bid: number, ask: number } 形式のレートオブジェクト。見つからない場合はnull。
  */
-export const getExchangeRate = (from: string, to: string, rates: RateData['rates'] | null): { bid: number, ask: number } | null => {
+export const getExchangeRate = (quoted: string, quoting: string, rates: RateData['rates'] | null): { bid: number, ask: number } | null => {
   if (!rates) return null;
-  if (from === to) return { bid: 1, ask: 1 };
+  if (quoted === quoting) return { bid: 1, ask: 1 };
 
   const base = 'USD';
 
-  // Case 1: 'from'が基準通貨 (例: USD -> JPY)
-  if (from === base) {
-    const directPair = `${from}/${to}`; // "USD/JPY"
+  // Case 1: 'quoted'が基準通貨 (例: USD -> JPY)
+  if (quoted === base) {
+    const directPair = `${quoted}/${quoting}`; // "USD/JPY"
     if (rates[directPair]) {
       return rates[directPair];
     }
   }
 
-  // Case 2: 'to'が基準通貨 (例: JPY -> USD)
-  if (to === base) {
-    const inversePair = `${to}/${from}`; // "USD/JPY"
+  // Case 2: 'quoting'が基準通貨 (例: JPY -> USD)
+  if (quoting === base) {
+    const inversePair = `${quoting}/${quoted}`; // JPY/USDレートは無いので、USD/JPYレートを反転させて生成する
     if (rates[inversePair]) {
       const inverseRate = rates[inversePair];
       // Bid/Askを反転: 1/ask が新しいbid, 1/bid が新しいask
@@ -36,24 +36,24 @@ export const getExchangeRate = (from: string, to: string, rates: RateData['rates
 
   // Case 3: 合成レート (例: JPY -> EUR)
   // JPY -> USD のレートを取得 (USD/JPYの逆数)
-  const fromRatePair = `${base}/${from}`; // "USD/JPY"
-  const fromRateData = rates[fromRatePair];
+  const firstLegPair = `${base}/${quoted}`; // "USD/JPY"
+  const firstLegData = rates[firstLegPair];
 
   // USD -> EUR のレートを取得
-  const toRatePair = `${base}/${to}`; // "USD/EUR"
-  const toRateData = rates[toRatePair];
+  const secondLegPair = `${base}/${quoting}`; // "USD/EUR"
+  const secondLegData = rates[secondLegPair];
 
-  if (fromRateData && toRateData) {
+  if (firstLegData && secondLegData) {
     // JPY -> USD の Bid/Ask を計算
-    const fromInverseRate = {
-      bid: 1 / fromRateData.ask,
-      ask: 1 / fromRateData.bid,
+    const firstLegInverseRate = {
+      bid: 1 / firstLegData.ask,
+      ask: 1 / firstLegData.bid,
     };
     
     // (JPY -> USD) * (USD -> EUR) = JPY -> EUR
     return {
-      bid: fromInverseRate.bid * toRateData.bid,
-      ask: fromInverseRate.ask * toRateData.ask,
+      bid: firstLegInverseRate.bid * secondLegData.bid,
+      ask: firstLegInverseRate.ask * secondLegData.ask,
     };
   }
   
@@ -62,95 +62,87 @@ export const getExchangeRate = (from: string, to: string, rates: RateData['rates
 
 
 /**
- * 金額を指定された通貨に変換します。
- * (この関数は変更ありません)
- */
-export const convertCurrency = (amount: number, fromCurrency: string, toCurrency: string, rates: RateData['rates'] | null): number => {
-  const rateInfo = getExchangeRate(fromCurrency, toCurrency, rates);
-  if (rateInfo === null) return 0;
-
-  const rate = rateInfo.bid;
-  const converted = amount * rate;
-
-  if (['JPY', 'KRW', 'VND'].includes(toCurrency)) {
-    return Math.round(converted);
-  }
-  return parseFloat(converted.toFixed(2));
-};
-
-/**
  * 金額をロケールに合わせた通貨形式の文字列にフォーマットします。
  * (この関数は変更ありません)
  */
 export const formatCurrency = (amount: number, currency: string): string => {
   try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: currency,
-      currencyDisplay: 'symbol'
-    }).format(amount);
-  } catch (e) {
-    return `${amount.toFixed(2)} ${currency}`;
-  }
-};
+    const noDecimalCurrencies = ['JPY', 'IDR', 'KRW', 'VND'];
+    const options: Intl.NumberFormatOptions = {
+        style: 'currency',
+        currency: currency,
+        currencyDisplay: 'symbol'
+    };
+    // noDecimalCurrenciesに含まれる通貨の場合、小数点以下の桁数を0にする
+    // ブラウザ自体に組み込まれている国際化ライブラリ（ICU）のデータに基づいて判定すると何故かIDRが小数点以下2桁まで表示されるため）
+    if (noDecimalCurrencies.includes(currency)) {
+        options.minimumFractionDigits = 0;
+        options.maximumFractionDigits = 0;
+    }
+
+    return new Intl.NumberFormat(undefined, options).format(amount);
+    } catch (e) {
+        return `${amount.toFixed(2)} ${currency}`;
+    }
+  };
 
 /**
  * 通貨記号から通貨コードに変換します。
  * @param symbol The currency symbol (e.g., '¥', '€').
  * @returns The corresponding currency code (e.g., 'JPY', 'EUR').
  */
-export const getCurrencyFromSymbol = (symbol: string): string => {
-  const map: { [key: string]: string } = {
-    // アジア・オセアニア
-    // '¥': 'JPY',
-    '円': 'JPY',
-    // '元': 'CNY',
-    '₩': 'KRW',
-    '₹': 'INR',
-    '₱': 'PHP',
-    '฿': 'THB',
-    '₫': 'VND',
-    'S$': 'SGD',
-    'RM': 'MYR',
-    'Rp': 'IDR',
-    '৳': 'BDT',
-    'LKR': 'LKR',
-    'रू': 'NPR',
-    '₨': 'PKR',
-    '៛': 'KHR',
-    '₭': 'LAK',
-    '₮': 'MNT',
+// export const  = (symbol: string): string => {
+//   const map: { [key: string]: string } = {
+//     // アジア・オセアニア
+//     // '¥': 'JPY',
+//     '円': 'JPY',
+//     // '元': 'CNY',
+//     '₩': 'KRW',
+//     '₹': 'INR',
+//     '₱': 'PHP',
+//     '฿': 'THB',
+//     '₫': 'VND',
+//     'S$': 'SGD',
+//     'RM': 'MYR',
+//     'Rp': 'IDR',
+//     '৳': 'BDT',
+//     'LKR': 'LKR',
+//     'रू': 'NPR',
+//     '₨': 'PKR',
+//     '៛': 'KHR',
+//     '₭': 'LAK',
+//     '₮': 'MNT',
 
-    // ヨーロッパ
-    '€': 'EUR',
-    '£': 'GBP',
-    'CHF': 'CHF',
-    '₽': 'RUB',
-    '₺': 'TRY',
-    // 'kr': 'SEK', // SEK, NOK, DKK
-    'zł': 'PLN',
-    '₴': 'UAH',
-    'Kč': 'CZK',
-    'Ft': 'HUF',
-    'L': 'RON',
-    'лв': 'BGN',
+//     // ヨーロッパ
+//     '€': 'EUR',
+//     '£': 'GBP',
+//     'CHF': 'CHF',
+//     '₽': 'RUB',
+//     '₺': 'TRY',
+//     // 'kr': 'SEK', // SEK, NOK, DKK
+//     'zł': 'PLN',
+//     '₴': 'UAH',
+//     'Kč': 'CZK',
+//     'Ft': 'HUF',
+//     'L': 'RON',
+//     'лв': 'BGN',
 
-    // 北米・南米
-    'C$': 'CAD',
-    'R$': 'BRL',
-    'Mex$': 'MXN',
+//     // 北米・南米
+//     'C$': 'CAD',
+//     'R$': 'BRL',
+//     'Mex$': 'MXN',
     
-    // 中東・アフリカ
-    '₪': 'ILS',
-    // '﷼': 'SAR', // SAR, IRR, QAR, OMR, YER
-    'د.إ': 'AED',
-    'R': 'ZAR',
-    '₦': 'NGN',
-    'KSh': 'KES',
-    'GH₵': 'GHS',
-  };
-  return map[symbol] || symbol;
-};
+//     // 中東・アフリカ
+//     '₪': 'ILS',
+//     // '﷼': 'SAR', // SAR, IRR, QAR, OMR, YER
+//     'د.إ': 'AED',
+//     'R': 'ZAR',
+//     '₦': 'NGN',
+//     'KSh': 'KES',
+//     'GH₵': 'GHS',
+//   };
+//   return map[symbol] || symbol;
+// };
 
 interface CurrencyInfo {
   name: string; // 国名
