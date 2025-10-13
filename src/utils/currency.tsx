@@ -52,8 +52,8 @@ export const getExchangeRate = (quoted: string, quoting: string, rates: RateData
     
     // (JPY -> USD) * (USD -> EUR) = JPY -> EUR
     return {
-      bid: firstLegInverseRate.bid * secondLegData.bid,
-      ask: firstLegInverseRate.ask * secondLegData.ask,
+      bid: (firstLegInverseRate.bid+firstLegData.ask) / 2 * secondLegData.bid, // (1/ask + bid) / 2 * bid => spreadを考慮したbid.  1st, 2nd 両方に1%乗せると最終レートの見栄えが悪くなる。
+      ask: (firstLegInverseRate.ask+firstLegData.bid) / 2 * secondLegData.ask, // (1/bid + ask) / 2 * ask => spreadを考慮したask
     };
   }
   
@@ -69,9 +69,9 @@ export const formatCurrency = (amount: number, currency: string): string => {
   try {
     const noDecimalCurrencies = ['JPY', 'IDR', 'KRW', 'VND'];
     const options: Intl.NumberFormatOptions = {
-        style: 'currency',
-        currency: currency,
-        currencyDisplay: 'symbol'
+            style: 'currency',
+            currency: currency,
+            currencyDisplay: 'symbol'
     };
     // noDecimalCurrenciesに含まれる通貨の場合、小数点以下の桁数を0にする
     // ブラウザ自体に組み込まれている国際化ライブラリ（ICU）のデータに基づいて判定すると何故かIDRが小数点以下2桁まで表示されるため）
