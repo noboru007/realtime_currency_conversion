@@ -18,7 +18,7 @@ initialize_app()
     ),
     secrets=["GEMINI_API_KEY"],
     memory=options.MemoryOption.GB_1,
-    timeout_sec=120
+    timeout_sec=60
 )
 def detectPrices(req: https_fn.Request) -> https_fn.Response:
     """価格を検出するFirebase Function (この関数は変更ありません)"""
@@ -81,8 +81,16 @@ def detectPrices(req: https_fn.Request) -> https_fn.Response:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
         
-        gemini_response = requests.post(url, headers=headers, json=request_body, timeout=55)
-        gemini_response.raise_for_status()
+        try:
+            gemini_response = requests.post(url, headers=headers, json=request_body, timeout=55)
+            gemini_response.raise_for_status()
+        except requests.exceptions.Timeout:
+            print("--- WARNING: Gemini API request timed out. ---")
+            return https_fn.Response(
+                json.dumps({"success": True, "detections": [], "warning": "API_TIMEOUT"}),
+                status=200,
+                headers={"Content-Type": "application/json"}
+            )
 
         response_data = gemini_response.json()
         result_text = ""

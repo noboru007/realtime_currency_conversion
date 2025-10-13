@@ -21,6 +21,7 @@ export interface DetectionResponse {
   }>;
   success: boolean;
   error?: string;
+  warning?: 'API_TIMEOUT';
 }
 
 export interface Rate {

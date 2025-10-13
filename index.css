@@ -128,7 +128,7 @@ html, body, #root {
   -webkit-backdrop-filter: blur(12px);
   border-top-left-radius: var(--border-radius-lg);
   border-top-right-radius: var(--border-radius-lg);
-  padding: 16px;
+  padding: 8px;
   box-sizing: border-box;
 }
 
@@ -141,24 +141,25 @@ html, body, #root {
   margin: 0 auto;
 }
 
-.currency-settings {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr; /* 3列グリッドレイアウト: [可変幅] [自動幅] [可変幅] */
-  align-items: center;
+/* --- 上段 --- */
+.controls-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   width: 100%;
   gap: 8px;
-  flex-grow: 1;
 }
 
 .currency-selector {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 6px;
+  flex: 1; /* 通貨セレクターが均等に幅を取るように */
 }
 .currency-selector label {
   font-size: 0.75rem;
   opacity: 0.8;
+  text-align: center;
 }
 .currency-selector select {
   background-color: rgba(255, 255, 255, 0.1);
@@ -178,23 +179,62 @@ html, body, #root {
   align-items: center;
   font-size: 0.75rem;
   white-space: nowrap;
+  padding: 24px 8px 0 8px; /* labelの高さ分を考慮して中央に配置 */
+  flex-shrink: 0;
 }
 .exchange-rate-display span {
   line-height: 1.4;
 }
 
+
+/* --- 下段 --- */
 .controls-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
+  gap: 12px;
+}
+
+.language-selector {
+  flex-basis: 120px; /* 言語セレクターの基本幅を指定 */
+  flex-shrink: 0;
+}
+.language-selector select {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-color);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--border-radius-sm);
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  width: 100%;
+}
+
+.banner-container-footer {
+  flex-grow: 1; /* バナーが残りのスペースを埋める */
+  min-width: 0; /* flexアイテムの縮小を許可 */
+}
+.banner-container-footer .banner {
+  margin: 0;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.85rem;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.status-and-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .status-bar {
-  flex-grow: 1;
-  text-align: left;
+  text-align: right;
   font-size: 0.9em;
   opacity: 0.9;
+  white-space: nowrap;
 }
 
 .pause-button {
@@ -211,6 +251,10 @@ html, body, #root {
   padding: 0;
   transition: background-color 0.2s ease;
   flex-shrink: 0;
+}
+.pause-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .pause-button svg {
   width: 24px;
