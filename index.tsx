@@ -23,7 +23,7 @@ const App: React.FC = () => {
 
   // const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -73,36 +73,36 @@ const App: React.FC = () => {
         if (detectedLocalCurrency && potentialHomeCurrency === detectedLocalCurrency) {
           setHomeCurrency('USD');
           console.log(`Home currency derived from locale (${potentialHomeCurrency}) is the same as the local currency. Defaulting home currency to USD.`);
-        } else {
+      } else {
           setHomeCurrency(potentialHomeCurrency);
           console.log(`Home currency set to ${potentialHomeCurrency} based on browser locale ${userLocale}.`);
-        }
+      }
       } catch (error) {
         console.warn('Could not determine home currency from locale. Defaulting to USD.', error);
         setHomeCurrency('USD'); // エラー時もUSDをデフォルトに
-      }
+    }
 
       await fetchRates();
       // すべての初期化処理が完了
       setStatus('running'); // <-- この時点でUIが操作可能になる
-    };
+  };
     initialize();
   }, [fetchRates, setStatus, setLocalCurrency, setBanner, setHomeCurrency, t]); // ← 依存配列に t を追加
 
   // カメラ起動ロジック
   const startCamera = async () => {
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
           // カメラが再生を開始したらスキャンループを開始
           videoRef.current.oncanplay = () => {
             // setIsPaused(false); // この行を削除またはコメントアウト
             scanLoop();
           };
-        }
-      } else {
+      }
+    } else {
         throw new Error('Camera not supported.');
       }
     } catch (error) {
@@ -127,7 +127,7 @@ const App: React.FC = () => {
   // 価格検出ロジック
   const detectPrices = async () => {
     if (!videoRef.current || !canvasRef.current || !videoRef.current.srcObject) return;
-    
+
     setIsAnalyzing(true);
     setDebugMessage('API request sent...'); // API呼び出し開始ログ
 
@@ -185,7 +185,7 @@ const App: React.FC = () => {
       setIsAnalyzing(false);
     }
   };
-  
+
   // 通貨ドロップダウンリストの選択肢を生成
   const priorityCurrencies = [
     'EUR', 'GBP', 'USD', 'JPY', 
@@ -205,14 +205,14 @@ const App: React.FC = () => {
     ? [...priorityCurrencies, ...otherCurrencies]
     : ['USD', 'EUR', 'JPY'];
 
-    return (
-      <div className="app-container">
+  return (
+    <div className="app-container">
         {/* <NotificationBanner />  */}
         <CameraView videoRef={videoRef} canvasRef={canvasRef} />
         <ControlPanel currencyOptions={currencyOptions} />
-      </div>
-    );
-  };
+    </div>
+  );
+};
   
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
