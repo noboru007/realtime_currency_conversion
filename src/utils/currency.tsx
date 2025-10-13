@@ -52,8 +52,8 @@ export const getExchangeRate = (quoted: string, quoting: string, rates: RateData
     
     // (JPY -> USD) * (USD -> EUR) = JPY -> EUR
     return {
-      bid: (firstLegInverseRate.bid+firstLegData.ask) / 2 * secondLegData.bid, // (1/ask + bid) / 2 * bid => spreadを考慮したbid.  1st, 2nd 両方に1%乗せると最終レートの見栄えが悪くなる。
-      ask: (firstLegInverseRate.ask+firstLegData.bid) / 2 * secondLegData.ask, // (1/bid + ask) / 2 * ask => spreadを考慮したask
+      bid: (firstLegInverseRate.bid + firstLegInverseRate.ask) / 2 * secondLegData.bid, // (1/ask + bid) / 2 * bid => spreadを考慮したbid.  1st, 2nd 両方に1%乗せると最終レートの見栄えが悪くなる。
+      ask: (firstLegInverseRate.ask + firstLegInverseRate.bid) / 2 * secondLegData.ask, // (1/bid + ask) / 2 * ask => spreadを考慮したask
     };
   }
   
