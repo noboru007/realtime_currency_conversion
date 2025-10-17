@@ -11,13 +11,10 @@ export interface DetectionRequest {
 
 export interface DetectionResponse {
   detections: Array<{
+    item?: string; // itemはオプショナルかもしれません
     amount: number;
-    boundingBox: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    };
+    itemBoundingBox?: { x: number; y: number; width: number; height: number; }; // 変更
+    amountBoundingBox: { x: number; y: number; width: number; height: number; }; // 変更    };
   }>;
   success: boolean;
   error?: string;
@@ -53,7 +50,12 @@ export interface ConversionResponse {
 // API呼び出し関数
 export const apiClient = {
   // 価格検出
-  async detectPrices(imageData: string, targetCurrency: string = 'USD'): Promise<DetectionResponse> {
+  async detectPrices(
+    imageData: string,
+    targetCurrency: string = 'USD',
+    exchangeRate: number | string = 1,
+    language: string = 'English'
+  ): Promise<DetectionResponse> {
     const response = await fetch(`${API_BASE_URL}/detectPrices`, {
       method: 'POST',
       headers: {
@@ -62,13 +64,25 @@ export const apiClient = {
       body: JSON.stringify({
         image_data: imageData,
         target_currency: targetCurrency,
+        exchange_rate: String(exchangeRate),
+        language: language,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.statusText}`);
-    }
+      // バックエンドからのエラーレスポンス(JSON)を取得
+      const errorBody = await response.json();
 
+      // useCurrencyStoreがエラーを正しく解釈できるよう、
+      // Axiosのエラーオブジェクトの構造を模倣してエラーをスローする
+      const error: any = new Error(errorBody.message || 'API request failed');
+      error.response = {
+        data: errorBody,
+        status: response.status
+      };
+      
+      throw error;
+    }
     return response.json();
   },
 

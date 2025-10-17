@@ -51,70 +51,99 @@ html, body, #root {
   object-fit: cover;
 }
 
-.detection-box {
+.captured-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   position: absolute;
-  background-color: rgba(0, 0, 0, 0.75);
-  border: 2px solid var(--primary-color);
-  border-radius: var(--border-radius-sm);
-  padding: 8px 12px;
+  top: 0;
+  left: 0;
+}
+
+.converted-amount { /* ← .detection-box のネストを解除 */
+  font-weight: bold;
+  color: var(--primary-color);
+  text-shadow: 1px 1px 2px black; /* 影を両方に追加 */
+  white-space: nowrap; /* ★ 追加: テキストが改行されるのを防ぐ */
+  pointer-events: none; /* ★ 追加: テキストがクリックイベントを妨げないようにする */
+}
+
+.item-name { /* ← .detection-box のネストを解除 */
+  font-weight: 500;
+  color: white;
+  opacity: 0.9;
+  text-shadow: 1px 1px 2px black;
+  white-space: nowrap; /* ★ 追加 */
+  pointer-events: none; /* ★ 追加 */
+}
+
+/* --- Global Overlays --- */
+.global-banner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 64px); /* 左右に32pxの余白 */
+  max-width: 450px;
+  z-index: 1000;
+  background-color: var(--overlay-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--border-radius-lg);
+  padding: 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
+}
+.global-banner-message {
+  font-size: 1rem;
+  line-height: 1.5;
   text-align: center;
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  z-index: 10;
-  pointer-events: none;
+  white-space: normal; /* 長い文章の折り返しを許可 */
 }
-
-.detection-box .converted-amount {
-  font-size: 1.5em;
-  font-weight: bold;
-  color: var(--primary-color);
-  line-height: 1.2;
-}
-
-.detection-box .original-price {
-  font-size: 0.9em;
-  opacity: 0.8;
-  line-height: 1.2;
-  margin-top: 2px;
-}
-
-/* --- Top Section (Banner) --- */
-.top-section {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 32px);
-  max-width: 600px;
-  z-index: 30;
-}
-
-.banner {
-  padding: 12px 16px;
-  border-radius: var(--border-radius-md);
+.global-banner-close {
+  background-color: rgba(255, 255, 255, 0.2);
   color: white;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-}
-.banner.error { background-color: #ef4444; }
-.banner.warning { background-color: #f59e0b; }
-
-.banner button {
-  background: none;
   border: none;
-  color: white;
-  font-size: 24px;
+  border-radius: var(--border-radius-md);
+  padding: 8px 16px;
   cursor: pointer;
-  opacity: 0.7;
-  padding: 0 5px;
+  font-size: 0.9rem;
 }
-.banner button:hover { opacity: 1; }
+
+.analyzing-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+  color: white;
+}
+.analyzing-spinner {
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top: 4px solid var(--primary-color);
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.analyzing-overlay p {
+  font-size: 1.1rem;
+}
 
 /* --- Bottom Section (Controls) --- */
 .bottom-section {
@@ -128,7 +157,9 @@ html, body, #root {
   -webkit-backdrop-filter: blur(12px);
   border-top-left-radius: var(--border-radius-lg);
   border-top-right-radius: var(--border-radius-lg);
-  padding: 8px;
+  padding: 4px;
+  background-color: rgba(24, 24, 27, 0.5); /* 0.8から0.5に変更 */
+  text-shadow: 1px 1px 2px black; /* 影を両方に追加 */
   box-sizing: border-box;
 }
 
@@ -166,7 +197,7 @@ html, body, #root {
   color: var(--text-color);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--border-radius-sm);
-  padding: 8px 12px;
+  padding: 4px 4px;
   font-size: 1rem;
   cursor: pointer;
   width: 100%;
@@ -179,7 +210,7 @@ html, body, #root {
   align-items: center;
   font-size: 0.75rem;
   white-space: nowrap;
-  padding: 24px 8px 0 8px; /* labelの高さ分を考慮して中央に配置 */
+  padding: 24px 4px 0 8px; /* labelの高さ分を考慮して中央に配置 */
   flex-shrink: 0;
 }
 .exchange-rate-display span {
@@ -205,22 +236,10 @@ html, body, #root {
   color: var(--text-color);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--border-radius-sm);
-  padding: 8px 12px;
+  padding: 4px 4px;
   font-size: 0.9rem;
   cursor: pointer;
   width: 100%;
-}
-
-.banner-container-footer {
-  flex-grow: 1; /* バナーが残りのスペースを埋める */
-  min-width: 0; /* flexアイテムの縮小を許可 */
-}
-.banner-container-footer .banner {
-  margin: 0;
-  border-radius: var(--border-radius-sm);
-  font-size: 0.85rem;
-  padding: 8px 12px;
-  text-align: center;
 }
 
 .status-and-button {
@@ -234,15 +253,15 @@ html, body, #root {
   text-align: right;
   font-size: 0.9em;
   opacity: 0.9;
-  white-space: nowrap;
+  /* white-space: nowrap; */
 }
 
-.pause-button {
-  background-color: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  width: 48px;
-  height: 48px;
+/* --- Capture Button --- */
+.capture-button {
+  background-color: #ffffff;
+  border: 3px solid var(--background-color);
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
@@ -251,12 +270,51 @@ html, body, #root {
   padding: 0;
   transition: background-color 0.2s ease;
   flex-shrink: 0;
+  box-shadow: 0 0 0 3px #ffffff;
 }
-.pause-button:disabled {
+.capture-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  background-color: #a0a0a0;
+  box-shadow: 0 0 0 3px #a0a0a0;
 }
-.pause-button svg {
-  width: 24px;
-  height: 24px;
+.capture-button svg {
+  width: 40px;
+  height: 40px;
+  stroke: var(--background-color);
+}
+
+
+/* --- Confirmation Dialog --- */
+.confirmation-dialog {
+  width: 100%;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.confirmation-dialog p {
+  font-size: 1rem;
+  text-align: center;
+}
+.confirmation-buttons {
+  display: flex;
+  gap: 16px;
+}
+.confirmation-button {
+  border: none;
+  padding: 12px 24px;
+  border-radius: var(--border-radius-md);
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+.confirmation-button.yes {
+  background-color: var(--primary-color);
+  color: var(--background-color);
+}
+.confirmation-button.no {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
 }

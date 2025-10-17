@@ -3,194 +3,260 @@ import ReactDOM from 'react-dom/client';
 import './index.css'; // CSSのインポート
 import { apiClient } from './src/api/client';
 import { useCurrencyStore } from './src/store/useCurrencyStore'; // Zustandストアをインポート
-import { NotificationBanner } from './src/components/NotificationBanner';
-// import { convertCurrency, formatCurrency, getCurencyFromSymbol, getExchangeRate } from './src/utils/currency';
-import { formatCurrency, getExchangeRate } from './src/utils/currency';
 import { CameraView } from './src/components/CameraView';
 import { ControlPanel } from './src/components/ControlPanel';
 import { localeCurrencyMetadata } from './src/utils/currency';
-import { useTranslationStore } from './src/store/useTranslationStore'; // ← 追加
+import { useTranslationStore } from './src/store/useTranslationStore';
+import { useUIStore } from './src/store/useUIStore';
+import { saveDivAsImage } from './src/utils/canvas'; // ★ saveCanvasAsImage から変更
+
+declare global {
+  interface Window {
+    saveARImage: () => void;
+  }
+}
+
+const AnalyzingOverlay: React.FC = () => {
+  const { t } = useTranslationStore();
+  return (
+    <div className="analyzing-overlay">
+      <div className="analyzing-spinner"></div>
+      <p>{t('analyzing')}</p>
+    </div>
+  );
+};
+
+const GlobalBanner: React.FC = () => {
+  const banner = useCurrencyStore((state) => state.banner);
+  if (!banner) return null;
+  
+  // ★ バナーを閉じる際の処理を関数にまとめる
+  const handleClose = () => {
+    // onCloseコールバックを呼び出すだけにする
+    if (banner.onClose) {
+      banner.onClose();
+    }
+  };
+
+  return (
+    <div className="global-banner">
+      <p className="global-banner-message">{banner.message}</p>
+      <button onClick={handleClose} className="global-banner-close">
+        OK
+      </button>
+    </div>
+  );
+};
 
 const App: React.FC = () => {
   const {
-    status, banner, rates, homeCurrency, localCurrency, detections,
-    setStatus, setBanner, setDebugMessage, isPaused, setIsPaused,
-    setHomeCurrency, setLocalCurrency, setDetections,
-    fetchRates
+    rates,
+    fetchRates,
+    setStatus,
+    setBanner,
+    setHomeCurrency,
+    setLocalCurrency,
+    setCapturedImage,
+    setConfirmationStep,
+    detections,
+    capturedImage,
+    status,
+    banner,
+    confirmationStep,
   } = useCurrencyStore();
 
-  const { t } = useTranslationStore(); // ← t関数を取得
-
-  // const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-
+  const { t } = useTranslationStore();
+  const { setOrientationAngle } = useUIStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  // --- 初期化処理 ---
-  useEffect(() => {
-    const initialize = async () => {
-      setStatus('loading');// <-- 初期化処理が終わるまでUIは操作不可になる
-      startCamera();
+  // --- AR Drawing and Saving Logic ---
+  const saveARImage = () => {
+    const cameraContainer = document.querySelector('.camera-container') as HTMLElement;
+    if (cameraContainer) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
 
-      // --- 1. 現地通貨を先に決定する ---
-      let detectedLocalCurrency: string | null = null;
-      const getLocation = (): Promise<GeolocationPosition> => {
-        return new Promise((resolve, reject) => {
-          if (!navigator.geolocation) {
-            return reject(new Error('Geolocation is not supported.'));
+      const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}_${milliseconds}`;
+      const filename = `OrionX_${timestamp}.png`;
+
+      saveDivAsImage(cameraContainer, filename); // ★ 動的なファイル名を使用
+
+      // Reset the state after saving
+      useCurrencyStore.getState().resetState();
+    }
+  };
+
+  // Expose the function to the window object
+  useEffect(() => {
+    window.saveARImage = saveARImage;
+  }, [capturedImage, detections]); // Dependencies are still useful to ensure the function has the right context
+
+
+  // --- Capture Logic ---
+  const handleCapture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      if (context) {
+        // 1. リサイズ後の最大寸法を定義
+        const MAX_DIMENSION = 1280; // 単位はピクセル
+
+        // 2. 元のビデオの寸法とアスペクト比を取得
+        const originalWidth = video.videoWidth;
+        const originalHeight = video.videoHeight;
+
+        let newWidth, newHeight;
+
+        // 3. アスペクト比を保ったまま新しい寸法を計算
+        // originalWidthとoriginalHeightのどちらかがMAX_DIMENSIONより大きい場合は、それをMAX_DIMENSIONに合わせる
+        if (originalWidth > MAX_DIMENSION || originalHeight > MAX_DIMENSION) {
+          if (originalWidth > originalHeight) {
+            // 横長の画像
+            newWidth = MAX_DIMENSION;
+            newHeight = (originalHeight / originalWidth) * MAX_DIMENSION;
+          } else {
+            // 縦長または正方形の画像
+            newHeight = MAX_DIMENSION;
+            newWidth = (originalWidth / originalHeight) * MAX_DIMENSION;
           }
+        } else {
+          newWidth = originalWidth;
+          newHeight = originalHeight;
+        }
+        // console.log('Resized (width, height):', newWidth, newHeight);
+
+        // 4. Canvasの寸法を新しいサイズに設定
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+
+        // 5. 元のビデオフレームを、新しいサイズのCanvasに縮小して描画
+        context.drawImage(video, 0, 0, newWidth, newHeight);
+        
+        // 6. リサイズ後の画像データを取得（品質は90%でも十分小さくなる）
+        const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+        // Update the store
+        setCapturedImage(imageData);
+        setConfirmationStep('analyze');
+      }
+    }
+  };
+
+  // Set up capture button event listener
+  useEffect(() => {
+    const captureButton = document.getElementById('capture-button');
+    if (captureButton) {
+      captureButton.addEventListener('click', handleCapture);
+    }
+    return () => {
+      if (captureButton) {
+        captureButton.removeEventListener('click', handleCapture);
+      }
+    };
+    // This effect should run once to set up the event listener.
+  }, []);
+
+
+  // デバイスの向きを監視するEffect
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      const orientation = window.screen.orientation.type; // デバイスの向きを取得。アプリ全体で使える。
+      if (orientation === "landscape-primary") {
+        // console.log('Landscape primary');
+        //setOrientationAngle(90);  // 横長の場合は90度回転
+        setOrientationAngle(0);
+      } else if (orientation === "landscape-secondary") {
+        // console.log('Landscape secondary');
+        //setOrientationAngle(-90);  // 横長の場合は-90度回転
+        setOrientationAngle(0);
+      } else {
+        // console.log('Portrait');
+        setOrientationAngle(0);  // 縦長の場合は0度回転
+      }
+    };
+    window.screen.orientation.addEventListener("change", handleOrientationChange);
+    handleOrientationChange();
+    return () => {
+      window.screen.orientation.removeEventListener("change", handleOrientationChange);
+    };
+  }, [setOrientationAngle]);
+
+  // 初期化処理のEffect
+  useEffect(() => {
+    const startCamera = async () => {
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        } else {
+          throw new Error('Camera not supported.');
+        }
+      } catch (error) {
+        setBanner({ message: t('cameraAccessFailed'), type: 'error' });
+        setStatus('error');
+      }
+    };
+
+    const initialize = async () => {
+      setStatus('loading');
+      await startCamera(); // startCameraが完了するのを待つ
+
+      let detectedLocalCurrency: string | null = null;
+      const getLocation = (): Promise<GeolocationPosition> => new Promise((resolve, reject) => {
+        if (!navigator.geolocation) return reject(new Error('Geolocation is not supported.'));
           navigator.geolocation.getCurrentPosition(resolve, reject);
         });
-      };
 
       try {
         const position = await getLocation();
         const { latitude, longitude } = position.coords;
         const data = await apiClient.getCurrencyFromLocation(latitude, longitude);
         if (data.currency_code) {
-          detectedLocalCurrency = data.currency_code; // 後で比較するために変数に格納
+          detectedLocalCurrency = data.currency_code;
           setLocalCurrency(data.currency_code);
-          console.log(`Local currency set to ${data.currency_code} based on location.`);
         }
       } catch (error) {
-        // ユーザーが許可しなかった場合(Permission denied)や、その他のエラーの場合
-        console.warn('Could not get geolocation or determine currency from it.', error);
+        console.warn('Could not get geolocation.', error);
         setBanner({ message: t('geolocationCurrencyFailed'), type: 'warning' });
       }
 
-      // --- 2. 自国通貨を決定する (現地通貨との重複チェック付き) ---
       try {
-        const userLocale = navigator.language; // 例: "ja-JP"
+        const userLocale = navigator.language;
         const localeInfo = localeCurrencyMetadata[userLocale];
-        let potentialHomeCurrency = 'USD'; // デフォルトはUSD
-
-        if (localeInfo) {
-          potentialHomeCurrency = localeInfo.currency;
-        }
-
-        // 現地通貨とロケール基点の自国通貨が同じ場合は、自国通貨をUSDにする
+        let potentialHomeCurrency = localeInfo ? localeInfo.currency : 'USD';
         if (detectedLocalCurrency && potentialHomeCurrency === detectedLocalCurrency) {
           setHomeCurrency('USD');
-          console.log(`Home currency derived from locale (${potentialHomeCurrency}) is the same as the local currency. Defaulting home currency to USD.`);
-      } else {
+        } else {
           setHomeCurrency(potentialHomeCurrency);
-          console.log(`Home currency set to ${potentialHomeCurrency} based on browser locale ${userLocale}.`);
-      }
+        }
       } catch (error) {
-        console.warn('Could not determine home currency from locale. Defaulting to USD.', error);
-        setHomeCurrency('USD'); // エラー時もUSDをデフォルトに
-    }
+        console.warn('Could not determine home currency from locale.', error);
+        setHomeCurrency('USD');
+      }
 
       await fetchRates();
-      // すべての初期化処理が完了
-      setStatus('running'); // <-- この時点でUIが操作可能になる
-  };
+      setStatus('running');
+    };
+
     initialize();
-  }, [fetchRates, setStatus, setLocalCurrency, setBanner, setHomeCurrency, t]); // ← 依存配列に t を追加
+  }, [fetchRates, setStatus, setLocalCurrency, setBanner, setHomeCurrency, t]);
 
-  // カメラ起動ロジック
-  const startCamera = async () => {
-    try {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-          // カメラが再生を開始したらスキャンループを開始
-          videoRef.current.oncanplay = () => {
-            // setIsPaused(false); // この行を削除またはコメントアウト
-            scanLoop();
-          };
-      }
-    } else {
-        throw new Error('Camera not supported.');
-      }
-    } catch (error) {
-      setBanner({ message: t('cameraAccessFailed'), type: 'error' }); // ← ここで翻訳
-      setStatus('error');
-    }
-  };
-  
-  // スキャンループ
-  const scanLoop = async () => {
-    // ストアから直接、最新の isPaused 状態を取得します
-    if (!useCurrencyStore.getState().isPaused) {
-      await detectPrices();
-    }
-    // 処理が完了、もしくはPause中だった場合、次のループをスケジュールする
-    // Pause中は200msごとに状態をチェックし、復帰に素早く反応できるようにする
-    // 次のループをスケジュールする際も、ストアから最新の状態を取得します
-    const delay = useCurrencyStore.getState().isPaused ? 200 : 1000; 
-    setTimeout(scanLoop, delay);
-  };
-
-  // 価格検出ロジック
-  const detectPrices = async () => {
-    if (!videoRef.current || !canvasRef.current || !videoRef.current.srcObject) return;
-
-    setIsAnalyzing(true);
-    setDebugMessage('API request sent...'); // API呼び出し開始ログ
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-
-    // --- ▼▼▼ 画像リサイズ処理を追加 ▼▼▼ ---
-    const MAX_DIMENSION = 512; // 画像の最も長い辺を768pxにリサイズ
-    let width = video.videoWidth;
-    let height = video.videoHeight;
-
-    if (width > height) {
-      if (width > MAX_DIMENSION) {
-        height = Math.round(height * (MAX_DIMENSION / width));
-        width = MAX_DIMENSION;
-      }
-    } else {
-      if (height > MAX_DIMENSION) {
-        width = Math.round(width * (MAX_DIMENSION / height));
-        height = MAX_DIMENSION;
-      }
-    }
-    canvas.width = width;
-    canvas.height = height;
-    // --- ▲▲▲ ここまで追加 ▲▲▲ ---    
-    const context = canvas.getContext('2d');
-    
-    if (!context) {
-        setIsAnalyzing(false);
-        return;
-    }
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    try {
-      //const imageData = canvas.toDataURL('image/jpeg');
-      const imageData = canvas.toDataURL('image/jpeg', 0.7); // 第2引数で画質を70%に指定
-      const response = await apiClient.detectPrices(imageData, homeCurrency);
-      // ▼▼▼ タイムアウト警告のハンドリングロジックを追加 ▼▼▼
-      if (response.warning === 'API_TIMEOUT') {
-        setBanner({ message: t('priceDetectionTimeout'), type: 'warning' });
-      } else if (banner?.type === 'error' || banner?.type === 'warning') {
-        // 正常に成功した場合、以前のエラーや警告バナーを消す
-        setBanner(null);
-      }
-
-      setDebugMessage(`API response received. Detections: ${response.detections.length}`);
-      setDetections(response.detections); // タイムアウト時は空の配列がセットされる
-
-    } catch (error) {
-      console.error('Error detecting prices:', error);
-      setDebugMessage('API request failed.'); // APIエラーログ
-      setBanner({ message: t('priceDetectionError'), type: 'error' }); // ← ここで翻訳
-      setDetections([]);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  // 通貨ドロップダウンリストの選択肢を生成
+  // 優先通貨のリスト
   const priorityCurrencies = [
     'EUR', 'GBP', 'USD', 'JPY', 
     'CNY', 'HKD', 'IDR', 'INR', 'KRW', 'MYR', 
-    'PHP', 'SGD', 'THB', 'TWD', 'VND'
+    'PHP', 'SGD', 'THB', 'TWD', 'VND', 'ISK'
   ].sort();
   
   const allCurrencies = rates 
@@ -207,13 +273,13 @@ const App: React.FC = () => {
 
   return (
     <div className="app-container">
-        {/* <NotificationBanner />  */}
         <CameraView videoRef={videoRef} canvasRef={canvasRef} />
-        <ControlPanel currencyOptions={currencyOptions} />
+        <ControlPanel currencyOptions={currencyOptions} onCapture={handleCapture} />
+        {status === 'analyzing' && <AnalyzingOverlay />}
+        {banner && !confirmationStep && <GlobalBanner />}
     </div>
   );
 };
-  
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(
