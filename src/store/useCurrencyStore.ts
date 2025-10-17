@@ -1,44 +1,52 @@
 import React from 'react'; // Reactをインポート
 import { create } from 'zustand';
 import { apiClient, RateData } from '../api/client';
+import { useTranslationStore } from './useTranslationStore'; // ★ この行を追加
 
 // バナーの型定義
 interface Banner {
   message: React.ReactNode;
-  type: 'error' | 'warning';
+  type: 'error' | 'warning' | 'info';
+  onClose?: () => void; // ★ onCloseコールバックをオプションとして追加
 }
 
 // 検出結果の型定義
-interface Detection {
+export interface Detection {
+  item?: string;
   amount: number;
   currency?: string;
-  boundingBox: { x: number; y: number; width: number; height: number; };
+  itemBoundingBox?: { x: number; y: number; width: number; height: number; }; // 変更
+  amountBoundingBox: { x: number; y: number; width: number; height: number; }; // 変更
 }
 
 // ストアの状態とアクションの型を定義
 interface CurrencyState {
-  status: 'loading' | 'running' | 'error';
+  status: 'loading' | 'running' | 'analyzing' | 'confirming' | 'saving' | 'error';
   banner: Banner | null;
-  debugMessage: string | null;
-  isPaused: boolean;
-  localToHomeRate: number | null; // ← この行を追加
-  homeToLocalRate: number | null; // ← この行を追加
-  rates: RateData['rates'] | null; // 型を更新
+  capturedImage: string | null;
+  confirmationStep: 'analyze' | 'save' | null;
+  localToHomeRate: number | null;
+  homeToLocalRate: number | null;
+  rates: RateData['rates'] | null;
   homeCurrency: string;
   localCurrency: string;
+  languageForPrompt: string; // language を追加
   detections: Detection[];
   
   // 状態を更新するためのアクション
-  setStatus: (status: 'loading' | 'running' | 'error') => void;
+  setStatus: (status: CurrencyState['status']) => void;
   setBanner: (banner: Banner | null) => void;
-  setDebugMessage: (message: string | null) => void;
-  setIsPaused: (isPaused: boolean) => void;
+  setCapturedImage: (image: string | null) => void;
+  setConfirmationStep: (step: CurrencyState['confirmationStep']) => void;
   setHomeCurrency: (currency: string) => void;
   setLocalCurrency: (currency: string) => void;
+  setLanguageForPrompt: (language: string) => void;
   setDetections: (detections: Detection[]) => void;
   
   // データ取得などの非同期アクション
   fetchRates: () => Promise<void>;
+  performDetection: () => Promise<void>;
+  resetState: () => void;
   setCalculatedRates: (rates: { localToHome: number | null, homeToLocal: number | null }) => void; // ← この行を追加
 }
 
@@ -47,22 +55,24 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   // --- 初期状態 ---
   status: 'loading',
   banner: null,
-  debugMessage: null,
-  isPaused: true, // 初期状態を一時停止に設定
-  localToHomeRate: null, // ← この行を追加
-  homeToLocalRate: null, // ← この行を追加
+  capturedImage: null,
+  confirmationStep: null,
+  localToHomeRate: null,
+  homeToLocalRate: null,
   rates: null,
   homeCurrency: 'USD',
   localCurrency: '',
+  languageForPrompt: 'English',
   detections: [],
 
   // --- 状態更新アクション ---
   setStatus: (status) => set({ status }),
   setBanner: (banner) => set({ banner }),
-  setDebugMessage: (message) => set({ debugMessage: message }), 
-  setIsPaused: (isPaused) => set({ isPaused }),
+  setCapturedImage: (image) => set({ capturedImage: image, detections: [] }), // 画像キャプチャ時に検出結果をリセット
+  setConfirmationStep: (step) => set({ confirmationStep: step }),
   setHomeCurrency: (currency) => set({ homeCurrency: currency }),
   setLocalCurrency: (currency) => set({ localCurrency: currency }),
+  setLanguageForPrompt: (language) => set({ languageForPrompt: language }),
   setDetections: (detections) => set({ detections }),
   
   // --- 非同期アクション ---
@@ -102,5 +112,98 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
       }
     }
   },
+
+  performDetection: async () => {
+    const { capturedImage, homeCurrency, languageForPrompt, localToHomeRate, resetState } = get();
+    const t = useTranslationStore.getState().t;
+
+    if (!capturedImage) return;
+      
+    set({ status: 'analyzing', confirmationStep: null, detections: [] });
+
+    try {
+      const response = await apiClient.detectPrices(
+        capturedImage,
+        homeCurrency,
+        localToHomeRate,
+        languageForPrompt
+      );
+      // ▼▼▼ この if/else ブロックを追加 ▼▼▼
+      if (response.detections && response.detections.length > 0) {
+        // 1件以上検出できた場合は、保存確認ステップに進む
+        set({ detections: response.detections, status: 'confirming', confirmationStep: 'save' });
+      } else {
+        // 検出結果が0件だった場合は、エラーとして処理する
+        set({
+          status: 'running',
+          banner: {
+            message: t('priceDetectionError'), // 「価格を検出できませんでした」
+            type: 'error',
+            onClose: () => {
+              // OK を押したら、状態を完全にリセットし、バナーを閉じる
+              set({
+                capturedImage: null,
+                detections: [],
+                confirmationStep: null,
+                status: 'running',
+                banner: null,
+              });
+            }
+          }
+        });
+      }
+    } catch (error:any) {
+      // ★ デバッグ用にエラーオブジェクト全体をコンソールに出力
+      console.log("Caught an error in performDetection:", error);
+
+      // ★ エラーレスポンスの存在をより安全にチェック
+      const errorData = error?.response?.data;
+
+      // if (error.response && error.response.data && error.response.data.error === 'timeout') {
+        if (errorData && errorData.error === 'timeout') {
+          // --- タイムアウトエラーの処理 ---
+          set({
+            status: 'running',
+            banner: {
+              message: t('priceDetectionTimeout'),
+              type: 'error',
+              onClose: () => {
+                // OK を押したら、解析確認ステップに戻り、バナーを閉じる
+                set({ confirmationStep: 'analyze', banner: null });
+              }
+            }
+          });
+        } else {
+          // --- タイムアウト以外の一般的なエラー処理 ---
+          set({
+            status: 'running',
+            banner: {
+              message: t('priceDetectionError'),
+              type: 'error',
+              onClose: () => {
+                // OK を押したら、状態を完全にリセットし、バナーを閉じる
+                set({
+                  capturedImage: null,
+                  detections: [],
+                  confirmationStep: null,
+                  status: 'running',
+                  banner: null,
+                });
+              }
+            }
+          });
+        }
+    }
+},
+
+  resetState: () => {
+    set({
+      capturedImage: null,
+      detections: [],
+      confirmationStep: null,
+      status: 'running',
+    });
+  },
+
   setCalculatedRates: (rates) => set({ localToHomeRate: rates.localToHome, homeToLocalRate: rates.homeToLocal }), // ← この行を追加
 }));
