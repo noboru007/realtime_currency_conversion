@@ -14,7 +14,8 @@ interface TranslationState {
 const getDefaultLanguage = (): string => {
   const browserLang = navigator.language.split('-')[0]; // 'ja-JP' -> 'ja'
   const isSupported = supportedLanguages.some(lang => lang.code === browserLang);
-  return isSupported ? browserLang : 'en'; // サポート外なら英語をデフォルトに
+  const defaultLang = isSupported ? browserLang : 'en'; // サポート外なら英語をデフォルトに
+  return defaultLang;
 };
 
 export const useTranslationStore = create<TranslationState>((set, get) => ({

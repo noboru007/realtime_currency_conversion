@@ -6,10 +6,28 @@ from datetime import datetime, timedelta, timezone
 
 from firebase_functions import https_fn, options
 from firebase_admin import initialize_app, storage
-import time # ★ timeモジュールをインポート
+import time
+import base64
+import io
+import json
+import random
+import re
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+import google.generativeai as genai
 
 # Firebase Storageなど他のサービスと連携するためにSDKを初期化します
 initialize_app()
+
+FONT_MAP = {
+    "ja": "NotoSansJP-Regular.ttf",
+    "ko": "NotoSansKR-Regular.ttf",
+    "hi": "NotoSansDevanagari-Regular.ttf",
+    "zh-CN": "NotoSansSC-Regular.ttf",
+    "zh-TW": "NotoSansTC-Regular.ttf",
+    "th": "NotoSansThai-Regular.ttf",
+}
 
 @https_fn.on_request(
     cors=options.CorsOptions(
@@ -21,7 +39,7 @@ initialize_app()
     timeout_sec=60
 )
 def detectPrices(req: https_fn.Request) -> https_fn.Response:
-    """価格を検出するFirebase Function"""
+    """価格を検出し、マスクを描画して画像を返すFirebase Function"""
     try:
         api_key = os.getenv("GEMINI_API_KEY") # APIキーを取得
         if not api_key:
@@ -39,164 +57,280 @@ def detectPrices(req: https_fn.Request) -> https_fn.Response:
 
         image_data_base64 = request_json['image_data'] # 画像データを取得
         image_content_base64 = image_data_base64.split(',')[1] if ',' in image_data_base64 else image_data_base64 # 画像データをBase64エンコード
-        target_currency = request_json.get('target_currency', 'USD') # ターゲット通貨を取得
-        exchange_rate = request_json.get('exchange_rate', '1') # 換算レートを取得
-        language = request_json.get('language', 'English') # 言語を取得
 
+        # Base64デコードしてリサイズ
+        image_bytes = base64.b64decode(image_content_base64)
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        # アスペクト比を保ちつつ、最大辺が1024pxになるようにリサイズ
+        img.thumbnail([1024, 1024], Image.Resampling.LANCZOS)
+
+        processed_width, processed_height = img.size
+        print(f"--- Image size sent to Gemini: {processed_width}x{processed_height} ---")
+
+        safety_settings = {
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        }
+        target_currency = request_json.get('target_currency', 'USD')
+        exchange_rate = float(request_json.get('exchange_rate', 1.0))
+        language = request_json.get('language', 'English')
+        print(f"--- Received language parameter: {language} ---")
+
+        # bounding_box_system_instructions = """
+        # Return bounding boxes as a JSON array of items and prices. Limit to 80 objects.
+        # """
         prompt = f"""
-この画像内の商品名と価格と通貨記号を検出してください。
-価格は数値で表示されています。
-商品名が無くても、価格情報は出力して下さい。
-商品名は、指定があった場合{language}に訳して出力してください。
-価格は、指定があった場合に{exchange_rate}をかけて、{target_currency}の最小ユニット単位の位で四捨五入して下さい。(例：JPY, KRW, VND, IDRは小数点無し。USDはCentの単位があるので小数点第2位)
-検出された商品名と、価格の数値部分を抽出し、商品名と価格のそれぞれの位置情報も含めて返してください。
-ターゲット通貨: {target_currency}
-換算レート: {exchange_rate}
-言語：{language}
+        Detect all items and their corresponding prices in this image.
+        Your response MUST be a valid JSON array of objects. Do not wrap it in markdown.
+        Each object in the array represents a detected pair and MUST contain the following four keys: "price_text", "price_box", "item_text", and "item_box".
 
-以下の形式でJSONを返してください:
-[
-{{
-"item": 商品名,
-"itemBoundingBox": {{
-"x": 左端の位置（0-100のパーセンテージ）,
-"y": 上端の位置（0-100のパーセンテージ）,
-"width": 幅（0-100のパーセンテージ）,
-"height": 高さ（0-100のパーセンテージ）
-}}
-"amount": 数値,
-"amountBoundingBox": {{
-"x": 左端の位置（0-100のパーセンテージ）,
-"y": 上端の位置（0-100のパーセンテージ）,
-"width": 幅（0-100のパーセンテージ）,
-"height": 高さ（0-100のパーセンテージ）
-}}
-}}
-]
-"""
+        - "price_text": Convert the detected price to {target_currency} using an exchange rate of {exchange_rate}. Round to 2 decimal places, except for JPY, KRW, VND, and IDR which should be integers. The result should be a string (e.g., "123.45 JPY").
+        - "price_box": A list of 4 numbers for the price's bounding box [y_min, x_min, y_max, x_max], normalized to 1000.
+        - "item_text": Translate the item's name to {language}. If no corresponding item is found for a price, this MUST be an empty string "".
+        - "item_box": A list of 4 numbers for the item's bounding box. If no item is found, this MUST be an empty list [].
 
-        request_body = { # リクエストボディを作成
-            "contents": [
-                {
-                    "parts": [ # パーツを作成
-                        {"text": prompt}, # プロンプトを追加
-                        {
-                            "inline_data": { # インラインデータを作成
-                                "mime_type": "image/jpeg", # メディアタイプを追加
-                                "data": image_content_base64 # 画像データを追加
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
+        IMPORTANT:
+        - ONLY include an object in the array if a "price_text" and "price_box" are clearly identified.
+        - If an item has a price, it MUST be included. If a price is visible but has no clear item, it MUST also be included (with empty "item_text" and "item_box").
+        - Do NOT include items that do not have a price.
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}" # URLを作成
-        headers = {"Content-Type": "application/json"} # ヘッダーを作成
+        Example of a valid object:
+        {{
+            "price_text": "123.45 JPY",
+            "price_box": [100, 200, 150, 300],
+            "item_text": "Item Name",
+            "item_box": [150, 50, 170, 250]
+        }}
+        """
+        # Detect all items and prices in the image.
+        # Your response MUST be a valid JSON array of objects. Do not wrap it in markdown.
+        # Each object in the array represents one detected item or price and MUST contain these three keys: "box_2d", "label", "text_content".
+
+        # 1.  "box_2d": A list of 4 numbers representing the bounding box coordinates [y_min, x_min, y_max, x_max], normalized to 1000.
+        # 2.  "label": A string, either "item" or "price".
+        # 3.  "text_content":
+        #     - If "label" is "item", translate the item's name to {language}. If the name cannot be determined, use an empty string "".
+        #     - If "label" is "price", convert the price to {target_currency} using an exchange rate of {exchange_rate}. Round to 2 decimal places, except for JPY, KRW, VND, and IDR which should be rounded to the nearest integer. The result should be a string (e.g., "123.45 JPY").
+
+        # Example of a single valid object:
+        # {{
+        #     "box_2d": [100, 200, 150, 300],
+        #     "label": "Translated Item Name or converted price in {target_currency}",
+        #     "text_content": "Translated Item Name or converted price"
+        # }}
+
+        # IMPORTANT: If "text_content" is empty, you MUST still include the key with an empty string value, like "text_content": "". Never omit the "text_content" key.
+        # """
+        # prompt = f"""Return bounding boxes as a JSON array of items and prices. Limit to 80 objects.
+        # Where price is detected, convert the price to {target_currency} using {exchange_rate}, rounded to the 2nd decimal place exepnt for JPY, KRW, VND, IDR to be rounded tothe nearest integer.
+        # Where item is detected, convert the item name to {language}.
+        # Detect the 2d bounding boxes of the items and prices. Label with value in text_content.
+        # Use the derived item name and converted price information as either th label or text_content.
+        # """
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
-        start_time = time.time()  # ★ tryブロックの前に移動
-        gemini_response = None  # ★ gemini_responseをNoneで初期化
+        start_time = time.time()
+        response = model.generate_content(
+            contents=[prompt, img],
+            generation_config = genai.GenerationConfig(
+                # system_instruction=bounding_box_system_instructions,
+                temperature=0.5
+            ),
+            safety_settings=safety_settings
+        )
+        end_time = time.time()
+        print(f"--- Gemini API call took: {end_time - start_time:.2f} seconds ---")
+
+        # print(prompt)
+        print(f"--- Gemini Raw Response ---:\n{response.text}")
+
+        #######
+        # AIから返されたオブジェクトの位置情報を基に、Boxと商品・値段情報を描画
+        #######
+        # --- Bounding Box Drawing Logic ---
         try:
-            gemini_response = requests.post(url, headers=headers, json=request_body, timeout=55)
-            gemini_response.raise_for_status()
+            bounding_boxes_text = response.text.strip('```json\n').strip('```').strip()
+            if bounding_boxes_text:
+                detected_pairs = json.loads(bounding_boxes_text)
+                
+                # Use a copy of the image for drawing
+                draw_img = img.copy()
+                draw = ImageDraw.Draw(draw_img)
+                # width, heightはここで改めて取得するのではなく、上で取得した値を使う
+                width, height = processed_width, processed_height
 
-        except requests.exceptions.Timeout:
-            print("--- WARNING: Gemini API request timed out. ---")
-            # ★ jsonifyを使わず、手動でJSONを作成
-            error_payload = json.dumps({
-                "error": "timeout",
-                "message": "Gemini API request timed out."
-            })
-            return https_fn.Response(
-                response=error_payload,
-                status=408,
-                headers={"Content-Type": "application/json"}
-            )
-        
-        except requests.exceptions.RequestException as e:
-            print(f"--- ERROR: An exception occurred during Gemini API call: {e} ---")
-            pass
+                # --- Font Loading Logic ---
+                font_file_name = FONT_MAP.get(language) # Get font if language is supported
+                font = None
 
-        finally:
-            # ★ finallyブロックで常に経過時間を計算・出力
-            elapsed_time = time.time() - start_time
-            print(f"--- Gemini API call took: {elapsed_time:.2f} seconds ---")
-
-        # ★ レスポンスがNoneの場合はエラーとして処理
-        if gemini_response is None:
-            raise Exception("Failed to get response from Gemini API.")
-        
-        response_data = gemini_response.json()
-        result_text = "" # 結果テキストを初期化
-
-        if 'candidates' in response_data and len(response_data['candidates']) > 0:
-            content = response_data['candidates'][0].get('content', {}) # コンテンツを取得
-            if 'parts' in content and len(content['parts']) > 0:
-                result_text = content['parts'][0].get('text', '') # テキストを取得
-
-        if not result_text:
-            detections = [] # 検出結果を初期化
-        else:
-            try: # テキストをJSON形式に変換
-                import re
-                json_match = re.search(r'```json\s*([\s\S]*?)\s*```', result_text)
-                if json_match:
-                    json_str = json_match.group(1) # テキストを取得
+                if font_file_name:
+                    font_path = f"/tmp/{font_file_name}"
+                    try:
+                        if not os.path.exists(font_path):
+                            bucket = storage.bucket()
+                            blob = bucket.blob(f"fonts/{font_file_name}")
+                            blob.download_to_filename(font_path)
+                            print(f"--- Downloaded font: {font_file_name} ---")
+                        font = ImageFont.truetype(font_path, size=16)
+                    except Exception as e:
+                        print(f"--- WARNING: Failed to load font '{font_file_name}'. Error: {e}. Using default. ---")
+                        font = ImageFont.load_default()
                 else:
-                    json_str = result_text # テキストを取得
+                    # If language not in map, use default font
+                    print(f"--- INFO: Language '{language}' not in FONT_MAP. Using default font. ---")
+                    font = ImageFont.load_default()
 
-                detections = json.loads(json_str)
-                if not isinstance(detections, list):
-                    detections = [detections] # 検出結果を初期化
-            except json.JSONDecodeError:
-                numbers = re.findall(r'\d+\.?\d*', result_text) # テキストを取得
-                detections = [
-                    {
-                        "item": "",
-                        "itemBoundingBox": {"x": 0, "y": 0, "width": 0, "height": 0},
-                        "currency": "?", 
-                        "amountBoundingBox": {"x": 0, "y": 0, "width": 100, "height": 100}
-                    } for num in numbers[:5]
-                ] # 検出結果を初期化
+                # --- Font Size Constants ---
+                MIN_FONT_SIZE = 8
+                MAX_FONT_SIZE = 48
 
-        print(f"--- DEBUG: detections: {detections} ---")
+                colors = [
+                    "#FF5733", "#33FF57", "#3357FF", "#FF33A1", "#A133FF", "#33FFA1",
+                    "#FFC300", "#C70039", "#900C3F", "#581845", "#00BFFF", "#FF69B4",
+                    "#7CFC00", "#FFD700", "#ADFF2F", "#00FFFF", "#4682B4", "#DDA0DD",
+                    "#20B2AA", "#DB7093", "#F4A460", "#8A2BE2", "#32CD32", "#FF4500"
+                ]
+                detections_for_response = []
 
-        # デバッグモードの確認
-        debug_mode = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
-        
-        response_data_dict = {
-            "detections": detections, 
-            "success": True
+                for i, pair in enumerate(detected_pairs):
+                    color = colors[i % len(colors)]
+                    
+                    price_text = pair.get("price_text")
+                    price_box = pair.get("price_box")
+                    item_text = pair.get("item_text")
+                    item_box = pair.get("item_box")
+
+                    # 必須項目である価格情報がなければスキップ
+                    if not price_text or not price_box or len(price_box) != 4:
+                        continue
+
+                    # まず、Geminiからの生の座標を変数に代入
+                    py0_norm, px0_norm, py1_norm, px1_norm = price_box
+
+                    # --- 価格の描画 ---
+                    # 1000に正規化された座標を、実際の画像サイズに合わせてスケール変換
+                    is_landscape_image = width > height
+
+                    # 縦長の画像なのに、返ってきたBoxが横に長い場合、座標系が90度回転していると判断
+                    box_width_norm = abs(px1_norm - px0_norm)
+                    box_height_norm = abs(py1_norm - py0_norm)
+
+                    if not is_landscape_image and box_width_norm > box_height_norm:
+                        # 座標を反時計回りに90度回転させる (x, y) -> (y, 1000-x)
+                        corrected_py0 = px0_norm
+                        corrected_px0 = 1000 - py1_norm
+                        corrected_py1 = px1_norm
+                        corrected_px1 = 1000 - py0_norm
+                        
+                        py0_norm, px0_norm, py1_norm, px1_norm = corrected_py0, corrected_px0, corrected_py1, corrected_px1
+                        
+                        # item_boxも同様に回転させる
+                        if item_box and len(item_box) == 4:
+                            iy0_norm, ix0_norm, iy1_norm, ix1_norm = item_box
+                            corrected_iy0 = ix0_norm
+                            corrected_ix0 = 1000 - iy1_norm
+                            corrected_iy1 = ix1_norm
+                            corrected_ix1 = 1000 - iy0_norm
+                            item_box = [corrected_iy0, corrected_ix0, corrected_iy1, corrected_ix1]
+
+                    py0 = int(py0_norm / 1000 * height)
+                    px0 = int(px0_norm / 1000 * width)
+                    py1 = int(py1_norm / 1000 * height)
+                    px1 = int(px1_norm / 1000 * width)
+
+                    if py0 > py1: py0, py1 = py1, py0
+                    if px0 > px1: px0, px1 = px1, px0
+                    
+                    draw.rectangle(((px0, py0), (px1, py1)), outline=color, width=1)
+                    
+                    # 動的フォントサイズ計算
+                    p_box_height = py1 - py0
+                    p_font_size = max(MIN_FONT_SIZE, min(int(p_box_height * 0.9), MAX_FONT_SIZE))
+                    try:
+                        p_dynamic_font = ImageFont.truetype(font.path, size=p_font_size)
+                    except (IOError, AttributeError):
+                        p_dynamic_font = ImageFont.load_default(size=p_font_size)
+                    
+                    draw.text((px0 + 5, py0 + 5), price_text, fill=color, font=p_dynamic_font)
+
+                    # --- 商品名の描画 (存在する場合のみ) ---
+                    if item_text and item_box and len(item_box) == 4:
+                        iy0_norm, ix0_norm, iy1_norm, ix1_norm = item_box
+                        # iy0, ix0, iy1, ix1 = [int(v / 1000 * dim) for v, dim in zip(item_box, [height, width, height, width])]
+                        iy0 = int(iy0_norm / 1000 * height)
+                        ix0 = int(ix0_norm / 1000 * width)
+                        iy1 = int(iy1_norm / 1000 * height)
+                        ix1 = int(ix1_norm / 1000 * width)
+
+                        if iy0 > iy1: iy0, iy1 = iy1, iy0
+                        if ix0 > ix1: ix0, ix1 = ix1, ix0
+
+                        draw.rectangle(((ix0, iy0), (ix1, iy1)), outline=color, width=1)
+
+                        # 動的フォントサイズ計算
+                        i_box_height = iy1 - iy0
+                        i_font_size = max(MIN_FONT_SIZE, min(int(i_box_height * 0.9), MAX_FONT_SIZE))
+                        try:
+                            i_dynamic_font = ImageFont.truetype(font.path, size=i_font_size)
+                        except (IOError, AttributeError):
+                            i_dynamic_font = ImageFont.load_default(size=i_font_size)
+
+                        draw.text((ix0 + 5, iy0 + 5), item_text, fill=color, font=i_dynamic_font)
+
+                    # --- フロントエンドに返すdetections配列の作成 ---　（未使用）
+                    try:
+                        match = re.search(r'([\d,.]*\d)', price_text)
+                        if match:
+                            price_str = match.group(0).replace(',', '')
+                            if price_str.count('.') <= 1:
+                                amount = float(price_str)
+                                detections_for_response.append({
+                                    'amount': amount,
+                                    'boundingBox': {'x': px0, 'y': py0, 'width': px1 - px0, 'height': py1 - py0}
+                                })
+                    except (ValueError, AttributeError) as e:
+                        print(f"--- INFO: Could not parse price from text: '{price_text}'. Error: {e} ---")
+                        pass
+                
+                # Replace original image with the one with drawings
+                img = draw_img
+
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"--- ERROR: Failed to parse or process bounding boxes. Error: {e} ---")
+            print(f"--- FAILING RESPONSE TEXT ---:\n{bounding_boxes_text}\n--------------------")
+            # If parsing fails, we'll just return the original image without boxes.
+            detections_for_response = []
+
+
+        # --- Image Encoding and Response ---
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+
+        # 最終的なレスポンスデータを定義
+        response_data = {
+            "success": True,
+            "image": "data:image/png;base64," + img_str,
+            "detections": detections_for_response
         }
-        
-        if debug_mode:
-            print("--- DEBUG MODE IS ON ---") # この行を追加して確認
-            debug_info = {"prompt_sent_to_gemini": prompt,
-                "gemini_response_keys": list(response_data.keys()) if 'response_data' in locals() else [],
-                "usage_metadata": response_data.get('usageMetadata', {}) if 'response_data' in locals() else {},
-                "model_version": response_data.get('modelVersion', '') if 'response_data' in locals() else '',
-                "extracted_text_length": len(result_text) if 'result_text' in locals() else 0,
-                "parsed_detections_count": len(detections),
-                "raw_gemini_text": result_text if 'result_text' in locals() else ""
-            }
-            response_data_dict["debug"] = debug_info
-        
-        return https_fn.Response( # レスポンスを返す
-            json.dumps(response_data_dict), # 検出結果を返す
-            status=200, # ステータスコードを返す
-            headers={"Content-Type": "application/json"} # ヘッダーを返す
+        # デバッグ情報を追加
+        response_data["debug_info"] = {
+            "processed_image_width": img.width,
+            "processed_image_height": img.height,
+            "gemini_raw_response": response.text.strip()
+        }
+
+        return https_fn.Response(
+            json.dumps(response_data),
+            status=200,
+            headers={"Content-Type": "application/json"}
         )
 
     except Exception as e:
-
         print(f"--- ERROR: An exception occurred: {type(e).__name__} ---")
         print(traceback.format_exc())
-        print("---------------------------------------------------------")
-        if isinstance(e, requests.exceptions.HTTPError):
-            print(f"--- ERROR RESPONSE FROM SERVER ---")
-            print(f"Status Code: {e.response.status_code}")
-            print(e.response.text)
-            print(f"--------------------------------")
         return https_fn.Response(
             json.dumps({"success": False, "error": f"An unexpected error occurred: {str(e)}"}),
             status=500,

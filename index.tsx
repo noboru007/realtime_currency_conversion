@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css'; // CSSのインポート
 import { apiClient } from './src/api/client';
@@ -70,7 +70,24 @@ const App: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  // --- AR Drawing and Saving Logic ---
+  // --- カメラ起動ロジック ---
+  const startCamera = useCallback(async () => {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } else {
+        throw new Error('Camera not supported.');
+      }
+    } catch (error) {
+      setBanner({ message: t('cameraAccessFailed'), type: 'error' });
+      setStatus('error');
+    }
+  }, [setBanner, setStatus, t]);
+
+  // --- 画像保存ロジック ---
   const saveARImage = () => {
     const cameraContainer = document.querySelector('.camera-container') as HTMLElement;
     if (cameraContainer) {
@@ -86,9 +103,8 @@ const App: React.FC = () => {
       const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}_${milliseconds}`;
       const filename = `OrionX_${timestamp}.png`;
 
-      saveDivAsImage(cameraContainer, filename); // ★ 動的なファイル名を使用
+      saveDivAsImage(cameraContainer, filename);
 
-      // Reset the state after saving
       useCurrencyStore.getState().resetState();
     }
   };
@@ -96,7 +112,7 @@ const App: React.FC = () => {
   // Expose the function to the window object
   useEffect(() => {
     window.saveARImage = saveARImage;
-  }, [capturedImage, detections]); // Dependencies are still useful to ensure the function has the right context
+  }, [capturedImage, detections]);
 
 
   // --- Capture Logic ---
@@ -107,80 +123,50 @@ const App: React.FC = () => {
       const context = canvas.getContext('2d');
 
       if (context) {
-        // 1. リサイズ後の最大寸法を定義
-        const MAX_DIMENSION = 1280; // 単位はピクセル
+        // video要素の現在の表示サイズをそのままCanvasのサイズとして使用
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
 
-        // 2. 元のビデオの寸法とアスペクト比を取得
-        const originalWidth = video.videoWidth;
-        const originalHeight = video.videoHeight;
-
-        let newWidth, newHeight;
-
-        // 3. アスペクト比を保ったまま新しい寸法を計算
-        // originalWidthとoriginalHeightのどちらかがMAX_DIMENSIONより大きい場合は、それをMAX_DIMENSIONに合わせる
-        if (originalWidth > MAX_DIMENSION || originalHeight > MAX_DIMENSION) {
-          if (originalWidth > originalHeight) {
-            // 横長の画像
-            newWidth = MAX_DIMENSION;
-            newHeight = (originalHeight / originalWidth) * MAX_DIMENSION;
-          } else {
-            // 縦長または正方形の画像
-            newHeight = MAX_DIMENSION;
-            newWidth = (originalWidth / originalHeight) * MAX_DIMENSION;
-          }
-        } else {
-          newWidth = originalWidth;
-          newHeight = originalHeight;
-        }
-        // console.log('Resized (width, height):', newWidth, newHeight);
-
-        // 4. Canvasの寸法を新しいサイズに設定
-        canvas.width = newWidth;
-        canvas.height = newHeight;
-
-        // 5. 元のビデオフレームを、新しいサイズのCanvasに縮小して描画
-        context.drawImage(video, 0, 0, newWidth, newHeight);
+        // videoのフレームをCanvasに描画
+        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
         
-        // 6. リサイズ後の画像データを取得（品質は90%でも十分小さくなる）
-        const imageData = canvas.toDataURL('image/jpeg', 0.9);
-
-        // Update the store
+        // EXIF情報を含まないPNG形式で画像データを取得
+        const imageData = canvas.toDataURL('image/png');
+        
+        // ストアを更新
         setCapturedImage(imageData);
         setConfirmationStep('analyze');
       }
     }
   };
 
-  // Set up capture button event listener
+  // --- Visibility Changeイベントを監視するEffect ---
   useEffect(() => {
-    const captureButton = document.getElementById('capture-button');
-    if (captureButton) {
-      captureButton.addEventListener('click', handleCapture);
-    }
-    return () => {
-      if (captureButton) {
-        captureButton.removeEventListener('click', handleCapture);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && videoRef.current) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        if (!stream || !stream.active) {
+          console.log('Camera stream is inactive. Restarting camera...');
+          startCamera();
+        }
       }
     };
-    // This effect should run once to set up the event listener.
-  }, []);
 
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [startCamera]);
 
   // デバイスの向きを監視するEffect
   useEffect(() => {
     const handleOrientationChange = () => {
-      const orientation = window.screen.orientation.type; // デバイスの向きを取得。アプリ全体で使える。
-      if (orientation === "landscape-primary") {
-        // console.log('Landscape primary');
-        //setOrientationAngle(90);  // 横長の場合は90度回転
-        setOrientationAngle(0);
-      } else if (orientation === "landscape-secondary") {
-        // console.log('Landscape secondary');
-        //setOrientationAngle(-90);  // 横長の場合は-90度回転
+      const orientation = window.screen.orientation.type;
+      if (orientation === "landscape-primary" || orientation === "landscape-secondary") {
         setOrientationAngle(0);
       } else {
-        // console.log('Portrait');
-        setOrientationAngle(0);  // 縦長の場合は0度回転
+        setOrientationAngle(0);
       }
     };
     window.screen.orientation.addEventListener("change", handleOrientationChange);
@@ -192,25 +178,9 @@ const App: React.FC = () => {
 
   // 初期化処理のEffect
   useEffect(() => {
-    const startCamera = async () => {
-      try {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        } else {
-          throw new Error('Camera not supported.');
-        }
-      } catch (error) {
-        setBanner({ message: t('cameraAccessFailed'), type: 'error' });
-        setStatus('error');
-      }
-    };
-
     const initialize = async () => {
       setStatus('loading');
-      await startCamera(); // startCameraが完了するのを待つ
+      await startCamera();
 
       let detectedLocalCurrency: string | null = null;
       const getLocation = (): Promise<GeolocationPosition> => new Promise((resolve, reject) => {
@@ -250,7 +220,7 @@ const App: React.FC = () => {
     };
 
     initialize();
-  }, [fetchRates, setStatus, setLocalCurrency, setBanner, setHomeCurrency, t]);
+  }, [fetchRates, setStatus, setLocalCurrency, setBanner, setHomeCurrency, t, startCamera]);
 
   // 優先通貨のリスト
   const priorityCurrencies = [

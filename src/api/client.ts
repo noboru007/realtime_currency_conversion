@@ -11,14 +11,12 @@ export interface DetectionRequest {
 
 export interface DetectionResponse {
   detections: Array<{
-    item?: string; // itemはオプショナルかもしれません
     amount: number;
-    itemBoundingBox?: { x: number; y: number; width: number; height: number; }; // 変更
-    amountBoundingBox: { x: number; y: number; width: number; height: number; }; // 変更    };
+    boundingBox: { x: number; y: number; width: number; height: number; };
   }>;
   success: boolean;
+  image: string; // Base64 encoded image string
   error?: string;
-  warning?: 'API_TIMEOUT';
 }
 
 export interface Rate {

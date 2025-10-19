@@ -39,6 +39,63 @@ html, body, #root {
   z-index: 1;
 }
 
+/* ★★★ 以下を追加 ★★★ */
+/* --- Top Section (Notifications) --- */
+.top-section {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 500px;
+  z-index: 20;
+  pointer-events: none; /* 下の要素を操作できるように */
+  display: flex;
+  justify-content: center;
+}
+
+.banner {
+  background-color: var(--overlay-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: white;
+  padding: 12px 16px;
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  pointer-events: auto; /* バナー自体は操作可能に */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.banner p {
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap; /* 改行とスペースを保持 */
+  word-break: break-word; /* 長い単語を折り返す */
+  margin-right: 12px;
+}
+
+.banner.error {
+  background-color: rgba(220, 38, 38, 0.8); /* エラー用の背景色 */
+}
+.banner.success {
+  background-color: rgba(74, 222, 128, 0.8); /* 成功用の背景色 */
+}
+
+.banner button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+/* ★★★ ここまで ★★★ */
+
 .camera-container {
   position: relative;
   width: 100%;
@@ -221,7 +278,7 @@ html, body, #root {
 /* --- 下段 --- */
 .controls-footer {
   display: flex;
-  justify-content: space-between;
+  /* justify-content: space-between; ← 削除 */
   align-items: center;
   width: 100%;
   gap: 12px;
@@ -230,7 +287,10 @@ html, body, #root {
 .language-selector {
   flex-basis: 120px; /* 言語セレクターの基本幅を指定 */
   flex-shrink: 0;
+  cursor: pointer;
+  width: 100%;
 }
+
 .language-selector select {
   background-color: rgba(255, 255, 255, 0.1);
   color: var(--text-color);
@@ -242,18 +302,15 @@ html, body, #root {
   width: 100%;
 }
 
-.status-and-button {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
 .status-bar {
   text-align: right;
   font-size: 0.9em;
   opacity: 0.9;
-  /* white-space: nowrap; */
+  /* max-width: 200px; */ /* ← 不要なので削除 */
+  word-wrap: break-word;
+  white-space: normal;
+  flex: 1; /* ★ 追加: 利用可能なスペースを埋める */
+  min-width: 0; /* ★ 追加: テキストの折り返しを許可 */
 }
 
 /* --- Capture Button --- */
@@ -267,7 +324,7 @@ html, body, #root {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0;
+  padding: 4px; /* ★ 0から変更 */
   transition: background-color 0.2s ease;
   flex-shrink: 0;
   box-shadow: 0 0 0 3px #ffffff;

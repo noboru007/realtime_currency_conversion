@@ -12,11 +12,8 @@ interface Banner {
 
 // 検出結果の型定義
 export interface Detection {
-  item?: string;
   amount: number;
-  currency?: string;
-  itemBoundingBox?: { x: number; y: number; width: number; height: number; }; // 変更
-  amountBoundingBox: { x: number; y: number; width: number; height: number; }; // 変更
+  boundingBox: { x: number; y: number; width: number; height: number; };
 }
 
 // ストアの状態とアクションの型を定義
@@ -24,6 +21,7 @@ interface CurrencyState {
   status: 'loading' | 'running' | 'analyzing' | 'confirming' | 'saving' | 'error';
   banner: Banner | null;
   capturedImage: string | null;
+  processedImage: string | null; // Add this line
   confirmationStep: 'analyze' | 'save' | null;
   localToHomeRate: number | null;
   homeToLocalRate: number | null;
@@ -37,6 +35,7 @@ interface CurrencyState {
   setStatus: (status: CurrencyState['status']) => void;
   setBanner: (banner: Banner | null) => void;
   setCapturedImage: (image: string | null) => void;
+  setProcessedImage: (image: string | null) => void; // Add this line
   setConfirmationStep: (step: CurrencyState['confirmationStep']) => void;
   setHomeCurrency: (currency: string) => void;
   setLocalCurrency: (currency: string) => void;
@@ -56,6 +55,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   status: 'loading',
   banner: null,
   capturedImage: null,
+  processedImage: null, // Add this line
   confirmationStep: null,
   localToHomeRate: null,
   homeToLocalRate: null,
@@ -68,7 +68,8 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   // --- 状態更新アクション ---
   setStatus: (status) => set({ status }),
   setBanner: (banner) => set({ banner }),
-  setCapturedImage: (image) => set({ capturedImage: image, detections: [] }), // 画像キャプチャ時に検出結果をリセット
+  setCapturedImage: (image) => set({ capturedImage: image, detections: [], processedImage: null }), // Reset processedImage
+  setProcessedImage: (image) => set({ processedImage: image }), // Add this line
   setConfirmationStep: (step) => set({ confirmationStep: step }),
   setHomeCurrency: (currency) => set({ homeCurrency: currency }),
   setLocalCurrency: (currency) => set({ localCurrency: currency }),
@@ -128,10 +129,13 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
         localToHomeRate,
         languageForPrompt
       );
-      // ▼▼▼ この if/else ブロックを追加 ▼▼▼
-      if (response.detections && response.detections.length > 0) {
-        // 1件以上検出できた場合は、保存確認ステップに進む
-        set({ detections: response.detections, status: 'confirming', confirmationStep: 'save' });
+      if (response.success && response.image) {
+        set({ 
+          detections: response.detections || [], 
+          processedImage: response.image,
+          status: 'confirming', 
+          confirmationStep: 'save' 
+        });
       } else {
         // 検出結果が0件だった場合は、エラーとして処理する
         set({
@@ -199,6 +203,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   resetState: () => {
     set({
       capturedImage: null,
+      processedImage: null, // Add this line
       detections: [],
       confirmationStep: null,
       status: 'running',
