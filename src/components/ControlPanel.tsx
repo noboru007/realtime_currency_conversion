@@ -3,7 +3,6 @@ import { useCurrencyStore } from '../store/useCurrencyStore';
 import { useTranslationStore } from '../store/useTranslationStore';
 import { getExchangeRate } from '../utils/currency';
 import { supportedLanguages } from '../i18n/translations';
-import { NotificationBanner } from './NotificationBanner'; // ← NotificationBannerをインポート
 
 // 新しい確認ボタン用のコンポーネント
 const ConfirmationButtons: React.FC = () => {
@@ -106,13 +105,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
   const { setLanguageForPrompt } = useCurrencyStore();
   const { t, language, setLanguage } = useTranslationStore();
 
+
   const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedCode = event.target.value;
     const selectedLanguage = supportedLanguages.find(lang => lang.code === selectedCode);
     
     if (selectedLanguage) {
       setLanguage(selectedLanguage.code); // For UI translation
-      setLanguageForPrompt(selectedLanguage.promptName); // For backend prompt
+      setLanguageForPrompt(selectedLanguage.code); // For backend prompt
     }
     else {
       console.log("No language found for code:", selectedCode);
@@ -165,20 +165,18 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
               </select>
             </div>
 
-            <div className="status-and-button">
-              <div className="status-bar">
-                
-              </div>
-              <button
-                id="capture-button" // IDを追加
-                className="capture-button" // クラス名を変更
-                aria-label={t('captureTooltip')}
-                disabled={isControlDisabled}
-                onClick={onCapture} // ★ onClickイベントハンドラを追加
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>
-              </button>
+            <div className="status-bar">
+              <p>{getStatusMessage()}</p>                
             </div>
+            <button
+              id="capture-button" // IDを追加
+              className="capture-button" // クラス名を変更
+              aria-label={t('captureTooltip')}
+              disabled={isControlDisabled}
+              onClick={onCapture} // ★ onClickイベントハンドラを追加
+            >
+              <svg xmlns="http://www.w.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>
+            </button>
           </div>
         </div>
       )}

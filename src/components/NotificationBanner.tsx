@@ -18,7 +18,7 @@ export const NotificationBanner: React.FC = () => {
   return (
     <div className="top-section">
       <div className={`banner ${banner.type}`}>
-      {message} {/* ← banner.message から message に変更 */}
+      <p>{message}</p> {/* ← メッセージを<p>タグで囲む */}
       <button onClick={() => setBanner(null)}>×</button>
       </div>
     </div>
