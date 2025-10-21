@@ -6,6 +6,6 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  orientationAngle: 0, // 初期値はポートレート(縦向き)の0度
+  orientationAngle: 0,
   setOrientationAngle: (angle) => set({ orientationAngle: angle }),
 }));

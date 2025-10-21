@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react'; // useEffectをインポート
 import { useCurrencyStore } from '../store/useCurrencyStore';
 import { useTranslationStore } from '../store/useTranslationStore';
+// useUIStoreはもう不要
 import { getExchangeRate } from '../utils/currency';
 import { supportedLanguages } from '../i18n/translations';
 
@@ -8,6 +9,7 @@ import { supportedLanguages } from '../i18n/translations';
 const ConfirmationButtons: React.FC = () => {
   const { confirmationStep, performDetection, resetState } = useCurrencyStore();
   const { t } = useTranslationStore();
+
 
   if (!confirmationStep) return null;
 
@@ -23,7 +25,7 @@ const ConfirmationButtons: React.FC = () => {
       }
     }
   };
-
+  
   const handleNo = () => {
     resetState();
   };
@@ -100,11 +102,29 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
     localCurrency, 
     setHomeCurrency, 
     setLocalCurrency,
-    confirmationStep
+    confirmationStep,
+    saveUserSettings // ★ 追加
   } = useCurrencyStore();
   const { setLanguageForPrompt } = useCurrencyStore();
-  const { t, language, setLanguage } = useTranslationStore();
+  const { language, setLanguage } = useTranslationStore();
+  const { t } = useTranslationStore(); // ★ useTranslationフックからtを取得
+  // showBannerはもう不要
 
+  // homeCurrencyまたはlanguageが変更されたらFirestoreに保存する
+  useEffect(() => {
+    // 初期化時（statusがloading）は保存しない
+    if (status !== 'loading') {
+      saveUserSettings();
+    }
+  }, [homeCurrency, language, saveUserSettings, status]);
+
+  useEffect(() => {
+    // コンポーネントのマウント時に一度だけ実行
+    const initialLanguage = supportedLanguages.find(lang => lang.code === language);
+    if (initialLanguage) {
+      setLanguageForPrompt(initialLanguage.promptName);
+    }
+  }, []); // 空の依存配列でマウント時に一度だけ実行
 
   const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedCode = event.target.value;
@@ -112,7 +132,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
     
     if (selectedLanguage) {
       setLanguage(selectedLanguage.code); // For UI translation
-      setLanguageForPrompt(selectedLanguage.code); // For backend prompt
+      setLanguageForPrompt(selectedLanguage.promptName); // For backend prompt ★ .code から .promptName に戻す
     }
     else {
       console.log("No language found for code:", selectedCode);
@@ -122,6 +142,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
   const getStatusMessage = () => {
     if (status === 'loading') return t('loading');
     if (status === 'analyzing') return t('analyzing');
+    // 'processed' 状態は、ConfirmationButtonsが表示されるか、バナーが表示されるため、
+    // ここでは特別なメッセージは不要。'readyToScan' にフォールバックさせる。
     if (status === 'error') return t('errorOccurred');
     if (confirmationStep) return t('waitingForInput');
     return t('readyToScan');
