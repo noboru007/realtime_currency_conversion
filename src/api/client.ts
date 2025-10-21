@@ -10,12 +10,8 @@ export interface DetectionRequest {
 }
 
 export interface DetectionResponse {
-  detections: Array<{
-    amount: number;
-    boundingBox: { x: number; y: number; width: number; height: number; };
-  }>;
   success: boolean;
-  image: string; // Base64 encoded image string
+  jobId?: string; // jobIdはオプション（成功時のみ存在）
   error?: string;
 }
 
@@ -51,37 +47,48 @@ export const apiClient = {
   async detectPrices(
     imageData: string,
     targetCurrency: string = 'USD',
-    exchangeRate: number | string = 1,
-    language: string = 'English'
+    language: string = 'English',
+    localCurrency: string = '',
+    exchangeRate: number | null = 1.0
   ): Promise<DetectionResponse> {
-    const response = await fetch(`${API_BASE_URL}/detectPrices`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image_data: imageData,
-        target_currency: targetCurrency,
-        exchange_rate: String(exchangeRate),
-        language: language,
-      }),
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}/detectPrices`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image_data: imageData,
+          target_currency: targetCurrency,
+          language: language, // ★ この行を復元
+          local_currency: localCurrency,
+          exchange_rate: exchangeRate,
+        }),
+      });
 
-    if (!response.ok) {
-      // バックエンドからのエラーレスポンス(JSON)を取得
-      const errorBody = await response.json();
+      if (!response.ok) {
+        let errorBody = { message: `API request failed with status ${response.status}` };
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          try {
+              errorBody = await response.json();
+          } catch (e) {
+              console.error("Failed to parse JSON error response:", e);
+          }
+        }
+        const error: any = new Error(errorBody.message || 'API request failed');
+        error.response = { data: errorBody, status: response.status };
+        throw error;
+      }
+      return response.json();
 
-      // useCurrencyStoreがエラーを正しく解釈できるよう、
-      // Axiosのエラーオブジェクトの構造を模倣してエラーをスローする
-      const error: any = new Error(errorBody.message || 'API request failed');
-      error.response = {
-        data: errorBody,
-        status: response.status
-      };
-      
-      throw error;
+    } catch (error: any) {
+      // ネットワークエラーなど、fetch自体が失敗した場合
+      console.error("API request failed:", error);
+      const newError: any = new Error(error.message || 'Network error');
+      newError.response = error.response || { data: { message: error.message }, status: 500 };
+      throw newError;
     }
-    return response.json();
   },
 
   // 為替レート取得

@@ -9,6 +9,8 @@ import { localeCurrencyMetadata } from './src/utils/currency';
 import { useTranslationStore } from './src/store/useTranslationStore';
 import { useUIStore } from './src/store/useUIStore';
 import { saveDivAsImage } from './src/utils/canvas'; // ★ saveCanvasAsImage から変更
+import { signIn } from './src/firebase';
+
 
 declare global {
   interface Window {
@@ -27,23 +29,21 @@ const AnalyzingOverlay: React.FC = () => {
 };
 
 const GlobalBanner: React.FC = () => {
-  const banner = useCurrencyStore((state) => state.banner);
+  const { banner, hideBanner } = useCurrencyStore();
+  const { t } = useTranslationStore();
+
   if (!banner) return null;
   
-  // ★ バナーを閉じる際の処理を関数にまとめる
-  const handleClose = () => {
-    // onCloseコールバックを呼び出すだけにする
-    if (banner.onClose) {
-      banner.onClose();
-    }
-  };
+  const message = t(banner.message as any);
 
   return (
     <div className="global-banner">
-      <p className="global-banner-message">{banner.message}</p>
-      <button onClick={handleClose} className="global-banner-close">
-        OK
-      </button>
+      <div className="global-banner-content">
+        <p className="global-banner-message">{message}</p>
+        <button onClick={hideBanner} className="global-banner-close">
+          OK
+        </button>
+      </div>
     </div>
   );
 };
@@ -53,7 +53,7 @@ const App: React.FC = () => {
     rates,
     fetchRates,
     setStatus,
-    setBanner,
+    showBanner,
     setHomeCurrency,
     setLocalCurrency,
     setCapturedImage,
@@ -63,9 +63,10 @@ const App: React.FC = () => {
     status,
     banner,
     confirmationStep,
+    resetState,
   } = useCurrencyStore();
 
-  const { t } = useTranslationStore();
+  const { t } = useTranslationStore(); // ★ フックを使用
   const { setOrientationAngle } = useUIStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,7 +75,20 @@ const App: React.FC = () => {
   const startCamera = useCallback(async () => {
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const constraints = {
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            // 頼りないCursorのAIによると：
+            // ブラウザとデバイスは、width, height, aspectRatioの3つのideal（理想値）を総合的に評価し、そのデバイスが提供できるビデオモードの中から最も近い最適なものを自動的に選択してくれます。これにより、様々なデバイスでより自然かつ高解像度な映像を取得できます。
+            // --- ▼▼▼ 縦長のアスペクト比を理想値として追加 ▼▼▼ ---
+            aspectRatio: { ideal: 9 / 16 }
+            // --- ▲▲▲ 縦長のアスペクト比を理想値として追加 ▲▲▲ ---
+          }
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -82,10 +96,10 @@ const App: React.FC = () => {
         throw new Error('Camera not supported.');
       }
     } catch (error) {
-      setBanner({ message: t('cameraAccessFailed'), type: 'error' });
+      showBanner(t('cameraAccessFailed'), 'error');
       setStatus('error');
     }
-  }, [setBanner, setStatus, t]);
+  }, [setStatus, showBanner, t]);
 
   // --- 画像保存ロジック ---
   const saveARImage = () => {
@@ -123,17 +137,52 @@ const App: React.FC = () => {
       const context = canvas.getContext('2d');
 
       if (context) {
-        // video要素の現在の表示サイズをそのままCanvasのサイズとして使用
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        const videoWidth = video.videoWidth;
+        const videoHeight = video.videoHeight;
+        const videoAspectRatio = videoWidth / videoHeight;
 
-        // videoのフレームをCanvasに描画
-        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+        const containerWidth = video.clientWidth;
+        const containerHeight = video.clientHeight;
+        const containerAspectRatio = containerWidth / containerHeight;
+
+        let sx = 0;
+        let sy = 0;
+        let sWidth = videoWidth;
+        let sHeight = videoHeight;
+
+        if (videoAspectRatio > containerAspectRatio) {
+          sWidth = videoHeight * containerAspectRatio;
+          sx = (videoWidth - sWidth) / 2;
+        } else {
+          sHeight = videoWidth / containerAspectRatio;
+          sy = (videoHeight - sHeight) / 2;
+        }
+
+        // --- ▼▼▼ 画像リサイズ処理を追加 ▼▼▼ ---
+        const MAX_WIDTH = 1024;
+        const MAX_HEIGHT = 1024;
+        let targetWidth = sWidth;
+        let targetHeight = sHeight;
+
+        if (targetWidth > MAX_WIDTH || targetHeight > MAX_HEIGHT) {
+          if (targetWidth / targetHeight > MAX_WIDTH / MAX_HEIGHT) {
+            targetWidth = MAX_WIDTH;
+            targetHeight = Math.round(targetWidth / (sWidth / sHeight));
+          } else {
+            targetHeight = MAX_HEIGHT;
+            targetWidth = Math.round(targetHeight * (sWidth / sHeight));
+          }
+        }
         
-        // EXIF情報を含まないPNG形式で画像データを取得
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        
+        // リサイズ後のCanvasにビデオの表示部分を描画
+        context.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, targetWidth, targetHeight);
+        // --- ▲▲▲ 画像リサイズ処理を追加 ▲▲▲ ---
+        
         const imageData = canvas.toDataURL('image/png');
         
-        // ストアを更新
         setCapturedImage(imageData);
         setConfirmationStep('analyze');
       }
@@ -145,8 +194,9 @@ const App: React.FC = () => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && videoRef.current) {
         const stream = videoRef.current.srcObject as MediaStream;
-        if (!stream || !stream.active) {
-          console.log('Camera stream is inactive. Restarting camera...');
+        // ストリームが存在しない、アクティブでない、またはビデオが一時停止している場合に再起動
+        if (!stream || !stream.active || videoRef.current.paused) {
+          console.log('Camera stream is inactive or paused. Restarting camera...');
           startCamera();
         }
       }
@@ -180,16 +230,21 @@ const App: React.FC = () => {
   useEffect(() => {
     const initialize = async () => {
       setStatus('loading');
+      
+      const user = await signIn();
+      useCurrencyStore.getState().setUserId(user.uid);
+      
       await startCamera();
 
-      let detectedLocalCurrency: string | null = null;
-      const getLocation = (): Promise<GeolocationPosition> => new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error('Geolocation is not supported.'));
-          navigator.geolocation.getCurrentPosition(resolve, reject);
-        });
+      // Firestoreから設定を読み込む
+      const settingsLoaded = await useCurrencyStore.getState().loadUserSettings();
 
+      let detectedLocalCurrency: string | null = null;
       try {
-        const position = await getLocation();
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          if (!navigator.geolocation) return reject(new Error('Geolocation is not supported.'));
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+        });
         const { latitude, longitude } = position.coords;
         const data = await apiClient.getCurrencyFromLocation(latitude, longitude);
         if (data.currency_code) {
@@ -198,21 +253,32 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.warn('Could not get geolocation.', error);
-        setBanner({ message: t('geolocationCurrencyFailed'), type: 'warning' });
+        showBanner(t('geolocationCurrencyFailed'), 'warning');
       }
 
-      try {
-        const userLocale = navigator.language;
-        const localeInfo = localeCurrencyMetadata[userLocale];
-        let potentialHomeCurrency = localeInfo ? localeInfo.currency : 'USD';
-        if (detectedLocalCurrency && potentialHomeCurrency === detectedLocalCurrency) {
-          setHomeCurrency('USD');
-        } else {
+      // Firestoreから設定が読み込まれなかった場合のみ、ロケールから自国通貨を推定
+      if (!settingsLoaded) {
+        try {
+          const userLocale = navigator.language; // 例: "ja" または "ja-JP"
+          let localeInfo = localeCurrencyMetadata[userLocale];
+
+          // 完全一致で見つからない場合、言語コード部分で前方一致検索を試みる
+          if (!localeInfo) {
+            const languagePart = userLocale.split('-')[0];
+            const matchingKey = Object.keys(localeCurrencyMetadata).find(key => key.startsWith(languagePart));
+            if (matchingKey) {
+              localeInfo = localeCurrencyMetadata[matchingKey];
+            }
+          }
+          
+          // 常にロケールから通貨を設定し、現地通貨と重複してもUSDに変更しない
+          const potentialHomeCurrency = localeInfo ? localeInfo.currency : 'USD';
           setHomeCurrency(potentialHomeCurrency);
+
+        } catch (error) {
+          console.warn('Could not determine home currency from locale.', error);
+          setHomeCurrency('USD');
         }
-      } catch (error) {
-        console.warn('Could not determine home currency from locale.', error);
-        setHomeCurrency('USD');
       }
 
       await fetchRates();
@@ -220,7 +286,7 @@ const App: React.FC = () => {
     };
 
     initialize();
-  }, [fetchRates, setStatus, setLocalCurrency, setBanner, setHomeCurrency, t, startCamera]);
+  }, []); // 依存配列を空にして、初回マウント時のみ実行
 
   // 優先通貨のリスト
   const priorityCurrencies = [

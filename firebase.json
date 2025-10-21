@@ -26,11 +26,11 @@
     ],
     "headers": [
       {
-        "source": "/**", // すべてのファイルに適用
+        "source": "/**", 
         "headers": [
           {
             "key": "Access-Control-Allow-Origin",
-            "value": "*" // すべてのオリジンを許可
+            "value": "*"
           }
         ]
       }
@@ -38,6 +38,6 @@
   },
   "functions": {
     "source": "backend/functions",
-    "runtime": "python311" // runtimeを元に戻す
+    "runtime": "python311"
   }
 }

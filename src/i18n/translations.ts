@@ -26,6 +26,7 @@ export const translations = {
         waitingForInput: '入力待機中...',
         readyToScan: '準備完了',
         captureTooltip: '画像をキャプチャ',
+        priceNotDetected: '価格が見つかりませんでした',
     },
     // 英語
     en: {
@@ -54,6 +55,7 @@ export const translations = {
         waitingForInput: 'Waiting for input...',
         readyToScan: 'Ready to scan',
         captureTooltip: 'Capture image',
+        priceNotDetected: 'Price not detected',
     },
     // フランス語
     fr: {
@@ -82,6 +84,7 @@ export const translations = {
         waitingForInput: "En attente d'entrée...",
         readyToScan: 'Prêt à scanner',
         captureTooltip: "Capturer l'image",
+        priceNotDetected: 'Prix non détecté',
     },
     // 韓国語
     ko: {
@@ -110,6 +113,7 @@ export const translations = {
         waitingForInput: '입력 대기 중...',
         readyToScan: '스캔 준비 완료',
         captureTooltip: '이미지 캡처',
+        priceNotDetected: '가격을 찾을 수 없습니다',
     },
     // ヒンディー語
     hi: {
@@ -138,6 +142,7 @@ export const translations = {
         waitingForInput: 'इनपुट की प्रतीक्षा है...',
         readyToScan: 'स्कैन के लिए तैयार',
         captureTooltip: 'छवि कैप्चर करें',
+        priceNotDetected: 'कीमत नहीं मिली',
     },
     // インドネシア語
     id: {
@@ -166,6 +171,7 @@ export const translations = {
         waitingForInput: 'Menunggu masukan...',
         readyToScan: 'Siap memindai',
         captureTooltip: 'Ambil gambar',
+        priceNotDetected: 'Harga tidak ditemukan',
     },
     // 中国語（簡体字）
     'zh-CN': {
@@ -194,6 +200,7 @@ export const translations = {
         waitingForInput: '等待输入...',
         readyToScan: '准备扫描',
         captureTooltip: '拍摄图像',
+        priceNotDetected: '未检测到价格',
     },
     // 中国語（繁体字）
     'zh-TW': {
@@ -222,6 +229,7 @@ export const translations = {
         waitingForInput: '等待輸入中...',
         readyToScan: '準備掃描',
         captureTooltip: '拍攝圖片',
+        priceNotDetected: '未偵測到價格',
     },
     // ベトナム語
     vi: {
@@ -250,6 +258,7 @@ export const translations = {
         waitingForInput: 'Đang chờ nhập...',
         readyToScan: 'Sẵn sàng quét',
         captureTooltip: 'Chụp ảnh',
+        priceNotDetected: 'Không tìm thấy giá',
     },
     // フィリピン語
     fil: {
@@ -278,6 +287,7 @@ export const translations = {
         waitingForInput: 'Naghihintay ng input...',
         readyToScan: 'Handa nang mag-scan',
         captureTooltip: 'Kumuha ng larawan',
+        priceNotDetected: 'Hindi nahanap ang presyo',
     },
     // マレーシア語
     ms: {
@@ -306,6 +316,7 @@ export const translations = {
         waitingForInput: 'Menunggu input...',
         readyToScan: 'Sedia untuk mengimbas',
         captureTooltip: 'Tangkap imej',
+        priceNotDetected: 'Harga tidak ditemui',
     },
     // タイ語
     th: {
@@ -334,6 +345,7 @@ export const translations = {
         waitingForInput: 'กำลังรอข้อมูล...',
         readyToScan: 'พร้อมสแกน',
         captureTooltip: 'ถ่ายภาพ',
+        priceNotDetected: 'ไม่พบราคา',
     },
     // ドイツ語
     de: {
@@ -362,6 +374,7 @@ export const translations = {
         waitingForInput: 'Warte auf Eingabe...',
         readyToScan: 'Bereit zum Scannen',
         captureTooltip: 'Bild aufnehmen',
+        priceNotDetected: 'Preis nicht gefunden',
     },
     // アイスランド語
     is: {
@@ -390,6 +403,7 @@ export const translations = {
         waitingForInput: 'Bíður eftir inntaki...',
         readyToScan: 'Tilbúin(n) til að skanna',
         captureTooltip: 'Taka mynd',
+        priceNotDetected: 'Verð fannst ekki',
     },
     // スペイン語
     es: {
@@ -418,6 +432,7 @@ export const translations = {
         waitingForInput: 'Esperando entrada...',
         readyToScan: 'Listo para escanear',
         captureTooltip: 'Capturar imagen',
+        priceNotDetected: 'Precio no detectado',
     },
     // ポルトガル語
     pt: {
@@ -446,6 +461,7 @@ export const translations = {
         waitingForInput: 'Aguardando entrada...',
         readyToScan: 'Pronto para escanear',
         captureTooltip: 'Capturar imagem',
+        priceNotDetected: 'Preço não detectado',
     },
     // イタリア語
     it: {
@@ -474,6 +490,7 @@ export const translations = {
         waitingForInput: 'In attesa di input...',
         readyToScan: 'Pronto per la scansione',
         captureTooltip: 'Cattura immagine',
+        priceNotDetected: 'Prezzo non trovato',
     },
 };
 
