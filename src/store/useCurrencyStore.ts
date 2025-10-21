@@ -109,7 +109,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
           // 7日以内の設定があれば適用
           if (settings.homeCurrency) set({ homeCurrency: settings.homeCurrency });
           if (settings.language) useTranslationStore.getState().setLanguage(settings.language);
-          console.log("Loaded user settings from Firestore:", settings);
+          // console.log("Loaded user settings from Firestore:", settings);
           return true;
         }
       }
@@ -260,7 +260,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   },
 
   resetState: () => {
-    console.log("--- RESET STATE CALLED ---", new Error().stack); // 呼び出し元を特定するためのログ
+    // console.log("--- RESET STATE CALLED ---", new Error().stack); // 呼び出し元を特定するためのログ
     const { unsubscribe } = get();
     if (unsubscribe) {
       unsubscribe(); // Firestoreの監視を解除
