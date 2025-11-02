@@ -33,6 +33,37 @@ FONT_MAP = {
     # FONT_MAPに言語コードのキーは不要。promptNameで統一する。
 }
 
+def convert_and_format_currency(amount, currency_code, exchange_rate):
+    """通貨記号を付けて数値をフォーマットする"""
+    if currency_code in ['JPY', 'KRW', 'VND', 'IDR']:
+        # 小数点以下を四捨五入して整数にする通貨
+        formatted_amount = f"{int(round(amount * exchange_rate, 0)):,}"
+    else:
+        # 小数点以下2桁で表示する通貨
+        formatted_amount = f"{amount * exchange_rate:,.2f}"
+
+    # 通貨記号を前に付けるか後ろに付けるかの簡易的なマッピング
+    symbol_map = {
+        'JPY': f'¥{formatted_amount}',
+        'USD': f'${formatted_amount}',
+        'EUR': f'€{formatted_amount}',
+        'GBP': f'£{formatted_amount}',
+        'KRW': f'₩{formatted_amount}',
+        'VND': f'₫{formatted_amount}',
+        'IDR': f'Rp{formatted_amount}',
+        'THB': f'฿{formatted_amount}',
+        'MYR': f'RM{formatted_amount}',
+        'PHP': f'₱{formatted_amount}',
+        'SGD': f'S${formatted_amount}',
+        'HKD': f'HK${formatted_amount}',
+        'NZD': f'NZ${formatted_amount}',
+        'CNY': f'¥{formatted_amount}',
+        'AUD': f'A${formatted_amount}',
+        'CAD': f'C${formatted_amount}',
+    }
+    # マップにない場合は、コードを後ろにつける
+    return symbol_map.get(currency_code, f'{formatted_amount} {currency_code}')
+
 # Firebase SDKの初期化
 if not firebase_admin._apps:
     initialize_app()
@@ -209,7 +240,7 @@ def detectPrices(req: https_fn.Request) -> https_fn.Response:
         target_currency = request_json.get('target_currency', 'USD')
         language = request_json.get('language', 'English')
         local_currency = request_json.get('local_currency', '')
-        exchange_rate = request_json.get('exchange_rate', 1.0)
+        exchange_rate = request_json.get('exchange_rate') or 1.0
 
         image_content_base64 = image_data_base64.split(',')[1] if ',' in image_data_base64 else image_data_base64
         image_bytes = base64.b64decode(image_content_base64)
@@ -269,7 +300,7 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 		target_currency = job_data.get('targetCurrency', 'USD')
 		language = job_data.get('language', 'English')
 		local_currency = job_data.get('localCurrency', '')
-		exchange_rate = job_data.get('exchangeRate', 1.0)
+		exchange_rate = job_data.get('exchangeRate') or 1.0
 		
 		rounding_instruction = "Round the result to 2 decimal places."
 		if target_currency in ['JPY', 'KRW', 'VND', 'IDR']:
@@ -288,7 +319,7 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 		Your response MUST be a valid JSON array of objects. Do not wrap it in markdown.
 		Each object in the array represents a detected pair and MUST contain the following four keys: "price_text", "price_box", "item_text", and "item_box".
 
-		- "price_text": Take the detected price and convert it to {target_currency} by multiplying with the exchange rate {exchange_rate}. The result MUST be a numeric value only. {rounding_instruction}
+		- "price_text": Take the detected price. The result MUST be a numeric value only.
 		- "price_box": A list of 4 numbers for the price's bounding box [y_min, x_min, y_max, x_max], normalized to 1000.
 		- "item_text": Translate the item's name to {language}. If no corresponding item is found for a price, this MUST be an empty string "".
 		- "item_box": A list of 4 numbers for the item's bounding box. If no item is found, this MUST be an empty list [].
@@ -340,7 +371,20 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 						print(f"--- WARNING: Job {job_id}: Failed to load TTF font '{font_file_name}': {e}. Using default. ---")
 				
 				MIN_FONT_SIZE, MAX_FONT_SIZE = 8, 48
-				colors = ["#FF5733", "#33FF57", "#3357FF", "#FF33A1", "#A133FF", "#33FFA1"]
+				colors = [
+					"#FF8866",  # コーラルオレンジ
+					"#FFD966",  # 明るいイエロー
+					"#66FF88",  # ライムグリーン
+					"#66FFDD",  # アクア/シアン
+					"#66B3FF",  # スカイブルー
+					"#8888FF",  # 明るいインディゴ
+					"#DD66FF",  # ラベンダー
+					"#FF66E8",  # ピンク
+					"#FF6699",  # ホットピンク
+					"#FF9966",  # ピーチ
+					"#BBFF66",  # イエローグリーン
+					"#66FFBB"   # ミントグリーン
+				]
 
 				for i, pair in enumerate(detected_pairs):
 					color = colors[i % len(colors)]
@@ -356,11 +400,14 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 						if px0 > px1: px0, px1 = px1, px0
 						draw.rectangle(((px0, py0), (px1, py1)), outline=color, width=1)
 						
-						p_font_size = max(MIN_FONT_SIZE, min(int((py1 - py0) * 0.9), MAX_FONT_SIZE))
+						p_font_size = max(MIN_FONT_SIZE, min(int((py1 - py0) * 0.8), MAX_FONT_SIZE))
 						final_font_p = ImageFont.truetype(font_path, size=p_font_size) if is_truetype and font_path else get_default_font(p_font_size)
-						draw.text((px0 + 5, py0 + 5), str(price_text), fill=color, font=final_font_p)
+						
+						# AIから渡された金額をターゲット通貨に変換
+						converted_price_text = convert_and_format_currency(float(price_text), target_currency, exchange_rate)
+						draw.text((px0 + 5, py0 + 5), str(converted_price_text), fill=color, font=final_font_p, stroke_width=1, stroke_fill="black")
 
-						match = re.search(r'([\d,.]*\d)', str(price_text))
+						match = re.search(r'([\d,.]*\d)', str(price_text)) # フロントには数値のみを返す。カンマは削除。今はフロントでは一つでも値段情報が返ってきたか否かの判定にしか使っていないが、英語文字の縦書きとかPillowで出来ないならフロントでやった方が良いかも。
 						if match:
 							price_str = match.group(0).replace(',', '')
 							if price_str.count('.') <= 1:
@@ -383,11 +430,33 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 						if ix0 > ix1: ix0, ix1 = ix1, ix1
 						draw.rectangle(((ix0, iy0), (ix1, iy1)), outline=color, width=2)
 
-						i_font_size = max(MIN_FONT_SIZE, min(int((iy1 - iy0) * 0.9), MAX_FONT_SIZE))
-						final_font_i = ImageFont.truetype(font_path, size=i_font_size) if is_truetype and font_path else get_default_font(i_font_size)
-						draw.text((ix0 + 5, iy0 + 5), item_text, fill=color, font=final_font_i)
-				
+						# --- Find the best font size for Item ---
+						max_font_size = 50
+						min_font_size = 8
+						final_font_i = None
+						# Iterate from max_font_size down to min_font_size to find the best fit
+						for font_size_i in range(max_font_size, min_font_size - 1, -1):
+							try:
+								# Try to load the font
+								font_i = ImageFont.truetype(font_path, font_size_i) if is_truetype and font_path else get_default_font(font_size_i)
+								text_bbox_i = draw.textbbox((0, 0), item_text, font=font_i)
+								text_width_i = text_bbox_i[2] - text_bbox_i[0]
+								text_height_i = text_bbox_i[3] - text_bbox_i[1]
+								if text_width_i <= ix1 - ix0 and text_height_i <= iy1 - iy0:
+									final_font_i = font_i
+									break
+							except Exception as e:
+								print(f"--- WARNING: Job {job_id}: Failed to load font for item text: {e}. Trying smaller size. ---")
+								continue
+						else:
+							# Fallback to a small font size if no suitable size is found
+							final_font_i = ImageFont.truetype(font_path, 10) if is_truetype and font_path else get_default_font(10)
+						
+						draw.text((ix0 + 1, iy0 + 1), item_text, fill=color, font=final_font_i, stroke_width=1, stroke_fill="black")
+			
 				print(f"--- [Job {job_id}] 5. AR drawing finished. ---")
+			else:
+				print(f"--- [Job {job_id}] 5. No pairs found. ---")
 						
 		except (AttributeError, json.JSONDecodeError, ValueError) as e:
 			print(f"Job {job_id}: JSON parsing or drawing failed. Using original image. Error: {e}")

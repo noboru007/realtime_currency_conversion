@@ -62,7 +62,7 @@ export const apiClient = {
           target_currency: targetCurrency,
           language: language, // ★ この行を復元
           local_currency: localCurrency,
-          exchange_rate: exchangeRate,
+          exchange_rate: exchangeRate || 1.0,
         }),
       });
 
