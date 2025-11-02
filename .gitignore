@@ -26,3 +26,7 @@ __pycache__/
 
 # Fonts
 backend/functions/fonts/
+
+# Large build/deployment files
+function-source.zip
+*.zip
