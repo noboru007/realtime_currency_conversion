@@ -13,8 +13,10 @@ interface Banner {
 
 // 検出結果の型定義
 export interface Detection {
-  amount: number;
-  boundingBox: { x: number; y: number; width: number; height: number; };
+  itemText: string;
+  itemBox: number[];
+  priceText: string;
+  priceBox: number[];
 }
 
 // ストアの状態とアクションの型を定義
@@ -22,7 +24,6 @@ interface CurrencyState {
   status: 'loading' | 'running' | 'analyzing' | 'processed' | 'error';
   banner: Banner | null;
   capturedImage: string | null;
-  processedImage: string | null; // Add this line
   confirmationStep: 'analyze' | 'save' | null;
   localToHomeRate: number | null;
   homeToLocalRate: number | null;
@@ -40,7 +41,6 @@ interface CurrencyState {
   setStatus: (status: CurrencyState['status']) => void;
   setBanner: (banner: Banner | null) => void;
   setCapturedImage: (image: string | null) => void;
-  setProcessedImage: (image: string | null) => void; // Add this line
   setConfirmationStep: (step: CurrencyState['confirmationStep']) => void;
   setHomeCurrency: (currency: string) => void;
   setLocalCurrency: (currency: string) => void;
@@ -68,7 +68,6 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   status: 'loading',
   banner: null,
   capturedImage: null,
-  processedImage: null, // Add this line
   confirmationStep: null,
   localToHomeRate: null,
   homeToLocalRate: null,
@@ -85,8 +84,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   setUserId: (userId) => set({ userId }), // ★ 追加
   setStatus: (status) => set({ status }),
   setBanner: (banner) => set({ banner }),
-  setCapturedImage: (image) => set({ capturedImage: image, detections: [], processedImage: null }), // Reset processedImage
-  setProcessedImage: (image) => set({ processedImage: image }), // Add this line
+  setCapturedImage: (image) => set({ capturedImage: image, detections: [] }),
   setConfirmationStep: (step) => set({ confirmationStep: step }),
   setHomeCurrency: (currency) => set({ homeCurrency: currency }),
   setLocalCurrency: (currency) => set({ localCurrency: currency }),
@@ -216,13 +214,13 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
     const unsub = onSnapshot(doc(db, "detectionJobs", jobId), 
       (doc) => {
         if (doc.exists()) {
-          const jobData = doc.data();
-          switch (jobData.status) {
+          const jobStatus = doc.get("status");
+          switch (jobStatus) {
             case 'completed':
-              const detections = jobData.detections || [];
+              // .get()を使ってフィールドを明示的に取得する
+              const detections = doc.get("detections") || [];
               set({ 
                 detections: detections, 
-                processedImage: jobData.processedImageUri,
                 status: 'processed',
               });
               if (detections.length > 0) {
@@ -234,7 +232,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
               set({ unsubscribe: null });
               break;
             case 'error':
-              console.error("Detection job failed in backend:", jobData.error);
+              console.error("Detection job failed in backend:", doc.get("error"));
               get().showBanner('priceDetectionError', 'error'); // ★ t()を削除し、翻訳キーを直接渡す
               set({ status: 'running' });
               unsub();
@@ -268,7 +266,6 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
     set({
       banner: null, // resetState時に直接バナーも消す
       capturedImage: null,
-      processedImage: null,
       detections: [],
       confirmationStep: null,
       status: 'running',

@@ -69,7 +69,6 @@ const App: React.FC = () => {
   const { t } = useTranslationStore(); // ★ フックを使用
   const { setOrientationAngle } = useUIStore();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // --- カメラ起動ロジック ---
   const startCamera = useCallback(async () => {
@@ -131,9 +130,10 @@ const App: React.FC = () => {
 
   // --- Capture Logic ---
   const handleCapture = () => {
-    if (videoRef.current && canvasRef.current) {
+    if (videoRef.current) { // canvasRefへの依存を削除
       const video = videoRef.current;
-      const canvas = canvasRef.current;
+      // canvasを動的に作成
+      const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
 
       if (context) {
@@ -309,7 +309,7 @@ const App: React.FC = () => {
 
   return (
     <div className="app-container">
-        <CameraView videoRef={videoRef} canvasRef={canvasRef} />
+        <CameraView videoRef={videoRef} />
         <ControlPanel currencyOptions={currencyOptions} onCapture={handleCapture} />
         {status === 'analyzing' && <AnalyzingOverlay />}
         {banner && !confirmationStep && <GlobalBanner />}
