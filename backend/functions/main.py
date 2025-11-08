@@ -12,7 +12,7 @@ import firebase_admin
 from firebase_admin import firestore, initialize_app, storage
 from firebase_functions import firestore_fn, https_fn, options
 import google.generativeai as genai
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 # 定数
 # FONT_MAPはクライアントサイドでの描画に移行したため不要
@@ -225,6 +225,7 @@ def detectPrices(req: https_fn.Request) -> https_fn.Response:
         language = request_json.get('language', 'English')
         local_currency = request_json.get('local_currency', '')
         exchange_rate = request_json.get('exchange_rate') or 1.0
+        device_orientation = request_json.get('device_orientation', 'portrait')
 
         image_content_base64 = image_data_base64.split(',')[1] if ',' in image_data_base64 else image_data_base64
         image_bytes = base64.b64decode(image_content_base64)
@@ -240,6 +241,7 @@ def detectPrices(req: https_fn.Request) -> https_fn.Response:
             'language': language,
             'localCurrency': local_currency,
             'exchangeRate': exchange_rate,
+            'deviceOrientation': device_orientation,
         })
             
         return https_fn.Response(
@@ -285,7 +287,8 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 		language = job_data.get('language', 'English')
 		local_currency = job_data.get('localCurrency', '')
 		exchange_rate = job_data.get('exchangeRate') or 1.0
-		
+		device_orientation = job_data.get('deviceOrientation', 'portrait')
+        
 		rounding_instruction = "Round the result to 2 decimal places."
 		if target_currency in ['JPY', 'KRW', 'VND', 'IDR']:
 			rounding_instruction = "Round the result to the nearest integer (0 decimal places)."
@@ -294,6 +297,10 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 		blob = bucket.blob(f"uploads/{job_id}.png")
 		image_bytes = blob.download_as_bytes()
 		img = Image.open(io.BytesIO(image_bytes))
+
+		if device_orientation == 'landscape':
+			print(f"--- [Job {job_id}] Rotating landscape image clockwise. ---")
+			img = img.rotate(-90, expand=True)
 
 		api_key = os.getenv("GEMINI_API_KEY")
 		genai.configure(api_key=api_key)

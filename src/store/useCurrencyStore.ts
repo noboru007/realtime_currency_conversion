@@ -30,11 +30,13 @@ interface CurrencyState {
   rates: RateData['rates'] | null;
   homeCurrency: string;
   localCurrency: string;
-  languageForPrompt: string; // language を追加
   detections: Detection[];
   jobId: string | null;
   unsubscribe: Unsubscribe | null; // Firestoreの監視を解除する関数
   userId: string | null; // ★ 追加
+  isSaveModalOpen: boolean;
+  savedImageURL: string | null;
+  deviceOrientation: 'portrait' | 'landscape';
   
   // 状態を更新するためのアクション
   setUserId: (userId: string) => void; // ★ 追加
@@ -44,9 +46,11 @@ interface CurrencyState {
   setConfirmationStep: (step: CurrencyState['confirmationStep']) => void;
   setHomeCurrency: (currency: string) => void;
   setLocalCurrency: (currency: string) => void;
-  setLanguageForPrompt: (language: string) => void;
   setDetections: (detections: Detection[]) => void;
   setJobId: (jobId: string | null) => void;
+  setSaveModalOpen: (isOpen: boolean) => void;
+  setSavedImageURL: (url: string | null) => void;
+  setDeviceOrientation: (orientation: 'portrait' | 'landscape') => void;
   listenToJobUpdates: (jobId: string) => void;
   showBanner: (message: string, type: Banner['type']) => void;
   hideBanner: () => void;
@@ -55,7 +59,7 @@ interface CurrencyState {
   fetchRates: () => Promise<void>;
   loadUserSettings: () => Promise<boolean>; // ★ 追加
   saveUserSettings: () => Promise<void>; // ★ 追加
-  performDetection: () => Promise<void>;
+  performDetection: (language: string) => Promise<void>;
   resetState: () => void;
   setCalculatedRates: (rates: { localToHome: number | null, homeToLocal: number | null }) => void; // ← この行を追加
 }
@@ -74,11 +78,13 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   rates: null,
   homeCurrency: 'USD',
   localCurrency: '',
-  languageForPrompt: 'English',
   detections: [],
   jobId: null,
   unsubscribe: null,
   userId: null, // ★ 追加
+  isSaveModalOpen: false,
+  savedImageURL: null,
+  deviceOrientation: 'portrait',
 
   // --- 状態更新アクション ---
   setUserId: (userId) => set({ userId }), // ★ 追加
@@ -88,9 +94,11 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   setConfirmationStep: (step) => set({ confirmationStep: step }),
   setHomeCurrency: (currency) => set({ homeCurrency: currency }),
   setLocalCurrency: (currency) => set({ localCurrency: currency }),
-  setLanguageForPrompt: (language) => set({ languageForPrompt: language }),
   setDetections: (detections) => set({ detections }),
   setJobId: (jobId) => set({ jobId }),
+  setSaveModalOpen: (isOpen) => set({ isSaveModalOpen: isOpen }),
+  setSavedImageURL: (url) => set({ savedImageURL: url }),
+  setDeviceOrientation: (orientation) => set({ deviceOrientation: orientation }),
   
   // --- 非同期アクション ---
   loadUserSettings: async () => {
@@ -173,8 +181,8 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
     }
   },
 
-  performDetection: async () => {
-    const { capturedImage, homeCurrency, languageForPrompt, localCurrency, localToHomeRate, resetState } = get();
+  performDetection: async (language) => {
+    const { capturedImage, homeCurrency, localCurrency, localToHomeRate, deviceOrientation, resetState } = get();
 
     if (!capturedImage) return;
       
@@ -185,9 +193,10 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
       const response = await apiClient.detectPrices(
         capturedImage,
         homeCurrency,
-        languageForPrompt,
+        language,
         localCurrency,
-        localToHomeRate
+        localToHomeRate,
+        deviceOrientation
       );
 
       if (response.success && response.jobId) {
@@ -271,6 +280,9 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
       status: 'running',
       jobId: null,
       unsubscribe: null,
+      isSaveModalOpen: false,
+      savedImageURL: null,
+      deviceOrientation: 'portrait',
     });
   },
 

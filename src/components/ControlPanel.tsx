@@ -8,14 +8,16 @@ import { supportedLanguages } from '../i18n/translations';
 // 新しい確認ボタン用のコンポーネント
 const ConfirmationButtons: React.FC = () => {
   const { confirmationStep, performDetection, resetState } = useCurrencyStore();
-  const { t } = useTranslationStore();
+  const { t, language } = useTranslationStore();
 
 
   if (!confirmationStep) return null;
 
   const handleYes = () => {
     if (confirmationStep === 'analyze') {
-      performDetection();
+      const selectedLanguage = supportedLanguages.find(lang => lang.code === language);
+      const languageForPrompt = selectedLanguage ? selectedLanguage.promptName : 'English';
+      performDetection(languageForPrompt);
     } else if (confirmationStep === 'save') {
       if (window.saveARImage) {
         window.saveARImage();
@@ -105,7 +107,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
     confirmationStep,
     saveUserSettings // ★ 追加
   } = useCurrencyStore();
-  const { setLanguageForPrompt } = useCurrencyStore();
   const { language, setLanguage } = useTranslationStore();
   const { t } = useTranslationStore(); // ★ useTranslationフックからtを取得
   // showBannerはもう不要
@@ -118,21 +119,12 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
     }
   }, [homeCurrency, language, saveUserSettings, status]);
 
-  useEffect(() => {
-    // コンポーネントのマウント時に一度だけ実行
-    const initialLanguage = supportedLanguages.find(lang => lang.code === language);
-    if (initialLanguage) {
-      setLanguageForPrompt(initialLanguage.promptName);
-    }
-  }, []); // 空の依存配列でマウント時に一度だけ実行
-
   const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedCode = event.target.value;
     const selectedLanguage = supportedLanguages.find(lang => lang.code === selectedCode);
     
     if (selectedLanguage) {
       setLanguage(selectedLanguage.code); // For UI translation
-      setLanguageForPrompt(selectedLanguage.promptName); // For backend prompt ★ .code から .promptName に戻す
     }
     else {
       console.log("No language found for code:", selectedCode);

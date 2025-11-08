@@ -10,6 +10,8 @@ import { useTranslationStore } from './src/store/useTranslationStore';
 import { useUIStore } from './src/store/useUIStore';
 import { saveDivAsImage } from './src/utils/canvas'; // ★ saveCanvasAsImage から変更
 import { signIn } from './src/firebase';
+import { SaveConfirmationModal } from './src/components/SaveConfirmationModal';
+import html2canvas from 'html2canvas';
 
 
 declare global {
@@ -64,6 +66,8 @@ const App: React.FC = () => {
     banner,
     confirmationStep,
     resetState,
+    setSaveModalOpen,
+    setSavedImageURL,
   } = useCurrencyStore();
 
   const { t } = useTranslationStore(); // ★ フックを使用
@@ -101,24 +105,41 @@ const App: React.FC = () => {
   }, [setStatus, showBanner, t]);
 
   // --- 画像保存ロジック ---
-  const saveARImage = () => {
+  const saveARImage = async () => {
     const cameraContainer = document.querySelector('.camera-container') as HTMLElement;
     if (cameraContainer) {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const seconds = String(now.getSeconds()).padStart(2, '0');
-      const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+      try {
+        const canvas = await html2canvas(cameraContainer, {
+          useCORS: true,
+          backgroundColor: null,
+        });
+        const imageURL = canvas.toDataURL('image/png');
 
-      const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}_${milliseconds}`;
-      const filename = `OrionX_${timestamp}.png`;
+        // Download the image
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+        const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}_${milliseconds}`;
+        const filename = `OrionX_${timestamp}.png`;
 
-      saveDivAsImage(cameraContainer, filename);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = imageURL;
+        link.click();
 
-      useCurrencyStore.getState().resetState();
+        // Show confirmation modal
+        setSavedImageURL(imageURL);
+        setSaveModalOpen(true);
+
+      } catch (error) {
+        console.error('Error capturing and saving image:', error);
+        showBanner('imageSaveFailed', 'error');
+      }
     }
   };
 
@@ -159,8 +180,8 @@ const App: React.FC = () => {
         }
 
         // --- ▼▼▼ 画像リサイズ処理を追加 ▼▼▼ ---
-        const MAX_WIDTH = 1024;
-        const MAX_HEIGHT = 1024;
+        const MAX_WIDTH = 1920;
+        const MAX_HEIGHT = 1920;
         let targetWidth = sWidth;
         let targetHeight = sHeight;
 
@@ -211,20 +232,24 @@ const App: React.FC = () => {
 
   // デバイスの向きを監視するEffect
   useEffect(() => {
+    const { setDeviceOrientation } = useCurrencyStore.getState();
     const handleOrientationChange = () => {
       const orientation = window.screen.orientation.type;
-      if (orientation === "landscape-primary" || orientation === "landscape-secondary") {
-        setOrientationAngle(0);
+      if (orientation.includes('landscape')) {
+        setDeviceOrientation('landscape');
       } else {
-        setOrientationAngle(0);
+        setDeviceOrientation('portrait');
       }
     };
-    window.screen.orientation.addEventListener("change", handleOrientationChange);
-    handleOrientationChange();
+
+    const screenOrientation = window.screen.orientation;
+    screenOrientation.addEventListener("change", handleOrientationChange);
+    handleOrientationChange(); // Initial check
+
     return () => {
-      window.screen.orientation.removeEventListener("change", handleOrientationChange);
+      screenOrientation.removeEventListener("change", handleOrientationChange);
     };
-  }, [setOrientationAngle]);
+  }, []);
 
   // 初期化処理のEffect
   useEffect(() => {
@@ -313,6 +338,7 @@ const App: React.FC = () => {
         <ControlPanel currencyOptions={currencyOptions} onCapture={handleCapture} />
         {status === 'analyzing' && <AnalyzingOverlay />}
         {banner && !confirmationStep && <GlobalBanner />}
+        <SaveConfirmationModal />
     </div>
   );
 };

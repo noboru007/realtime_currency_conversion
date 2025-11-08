@@ -34,9 +34,20 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
       // Clear previous drawings
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+      const { deviceOrientation } = useCurrencyStore.getState();
+      const needsRotation = deviceOrientation === 'landscape';
+      
+      if (needsRotation) {
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(Math.PI / 2); // 90 degrees clockwise
+        ctx.translate(-canvas.height / 2, -canvas.width / 2);
+      }
+
       if (detections && detections.length > 0) {
-        const scaleX = canvas.width;
-        const scaleY = canvas.height;
+        // Adjust scale factors based on rotation
+        const scaleX = needsRotation ? canvas.height : canvas.width;
+        const scaleY = needsRotation ? canvas.width : canvas.height;
 
         detections.forEach(({ itemText, itemBox, priceText, priceBox }) => {
           // Draw for Price
@@ -49,6 +60,10 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
           }
         });
       }
+
+      if (needsRotation) {
+        ctx.restore();
+      }
     };
 
     const drawDetection = (
@@ -59,6 +74,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
         scaleY: number
     ) => {
         const [yMin, xMin, yMax, xMax] = box;
+
         const left = xMin / 1000 * scaleX;
         const top = yMin / 1000 * scaleY;
         const width = (xMax - xMin) / 1000 * scaleX;

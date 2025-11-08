@@ -49,7 +49,8 @@ export const apiClient = {
     targetCurrency: string = 'USD',
     language: string = 'English',
     localCurrency: string = '',
-    exchangeRate: number | null = 1.0
+    exchangeRate: number | null = 1.0,
+    deviceOrientation: 'portrait' | 'landscape' = 'portrait'
   ): Promise<DetectionResponse> {
     try {
       const response = await fetch(`${API_BASE_URL}/detectPrices`, {
@@ -63,6 +64,7 @@ export const apiClient = {
           language: language, // ★ この行を復元
           local_currency: localCurrency,
           exchange_rate: exchangeRate || 1.0,
+          device_orientation: deviceOrientation,
         }),
       });
 
