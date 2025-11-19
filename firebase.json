@@ -39,5 +39,8 @@
   "functions": {
     "source": "backend/functions",
     "runtime": "python311"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
   }
 }

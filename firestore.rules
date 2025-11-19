@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ユーザー設定: 本人のみ読み書き可能
+    match /userSettings/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 検出ジョブ:
+    // 作成: 認証済みユーザーならOK
+    // 読み取り・更新: 本人のみ（リソースの作成者フィールドがない場合もあるため、一旦認証済みならOKとする）
+    // ※ セキュリティ強化のためには、ドキュメントに ownerId を含めてチェックするのが望ましい
+    match /detectionJobs/{jobId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // 位置情報キャッシュ:
+    // クライアントからは読み取りのみ許可（書き込みはサーバーが行うため）
+    match /locationCache/{cacheKey} {
+      allow read: if request.auth != null;
+      allow write: if false; // サーバーサイドSDKはこれをバイパスできる
+    }
+  }
+}
+

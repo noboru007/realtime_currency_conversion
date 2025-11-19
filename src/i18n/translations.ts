@@ -27,6 +27,8 @@ export const translations = {
         readyToScan: '準備完了',
         captureTooltip: '画像をキャプチャ',
         priceNotDetected: '価格が見つかりませんでした',
+        previewButton: 'プレビュー',
+        closeButton: '閉じる',
     },
     // 英語
     en: {
@@ -56,6 +58,8 @@ export const translations = {
         readyToScan: 'Ready to scan',
         captureTooltip: 'Capture image',
         priceNotDetected: 'Price not detected',
+        previewButton: 'Preview',
+        closeButton: 'Close',
     },
     // フランス語
     fr: {
@@ -85,6 +89,8 @@ export const translations = {
         readyToScan: 'Prêt à scanner',
         captureTooltip: "Capturer l'image",
         priceNotDetected: 'Prix non détecté',
+        previewButton: 'Aperçu',
+        closeButton: 'Fermer',
     },
     // 韓国語
     ko: {
@@ -114,6 +120,8 @@ export const translations = {
         readyToScan: '스캔 준비 완료',
         captureTooltip: '이미지 캡처',
         priceNotDetected: '가격을 찾을 수 없습니다',
+        previewButton: '미리보기',
+        closeButton: '닫기',
     },
     // ヒンディー語
     hi: {
@@ -143,6 +151,8 @@ export const translations = {
         readyToScan: 'स्कैन के लिए तैयार',
         captureTooltip: 'छवि कैप्चर करें',
         priceNotDetected: 'कीमत नहीं मिली',
+        previewButton: 'पूर्वावलोकन',
+        closeButton: 'बंद करें',
     },
     // インドネシア語
     id: {
@@ -172,6 +182,8 @@ export const translations = {
         readyToScan: 'Siap memindai',
         captureTooltip: 'Ambil gambar',
         priceNotDetected: 'Harga tidak ditemukan',
+        previewButton: 'Pratinjau',
+        closeButton: 'Tutup',
     },
     // 中国語（簡体字）
     'zh-CN': {
@@ -201,6 +213,8 @@ export const translations = {
         readyToScan: '准备扫描',
         captureTooltip: '拍摄图像',
         priceNotDetected: '未检测到价格',
+        previewButton: '预览',
+        closeButton: '关闭',
     },
     // 中国語（繁体字）
     'zh-TW': {
@@ -230,6 +244,8 @@ export const translations = {
         readyToScan: '準備掃描',
         captureTooltip: '拍攝圖片',
         priceNotDetected: '未偵測到價格',
+        previewButton: '預覽',
+        closeButton: '關閉',
     },
     // ベトナム語
     vi: {
@@ -259,6 +275,8 @@ export const translations = {
         readyToScan: 'Sẵn sàng quét',
         captureTooltip: 'Chụp ảnh',
         priceNotDetected: 'Không tìm thấy giá',
+        previewButton: 'Xem trước',
+        closeButton: 'Đóng',
     },
     // フィリピン語
     fil: {
@@ -288,6 +306,8 @@ export const translations = {
         readyToScan: 'Handa nang mag-scan',
         captureTooltip: 'Kumuha ng larawan',
         priceNotDetected: 'Hindi nahanap ang presyo',
+        previewButton: 'Preview',
+        closeButton: 'Isara',
     },
     // マレーシア語
     ms: {
@@ -317,6 +337,8 @@ export const translations = {
         readyToScan: 'Sedia untuk mengimbas',
         captureTooltip: 'Tangkap imej',
         priceNotDetected: 'Harga tidak ditemui',
+        previewButton: 'Pratonton',
+        closeButton: 'Tutup',
     },
     // タイ語
     th: {
@@ -346,6 +368,8 @@ export const translations = {
         readyToScan: 'พร้อมสแกน',
         captureTooltip: 'ถ่ายภาพ',
         priceNotDetected: 'ไม่พบราคา',
+        previewButton: 'ดูตัวอย่าง',
+        closeButton: 'ปิด',
     },
     // ドイツ語
     de: {
@@ -375,6 +399,8 @@ export const translations = {
         readyToScan: 'Bereit zum Scannen',
         captureTooltip: 'Bild aufnehmen',
         priceNotDetected: 'Preis nicht gefunden',
+        previewButton: 'Vorschau',
+        closeButton: 'Schließen',
     },
     // アイスランド語
     is: {
@@ -404,6 +430,8 @@ export const translations = {
         readyToScan: 'Tilbúin(n) til að skanna',
         captureTooltip: 'Taka mynd',
         priceNotDetected: 'Verð fannst ekki',
+        previewButton: 'Forskoða',
+        closeButton: 'Loka',
     },
     // スペイン語
     es: {
@@ -433,6 +461,8 @@ export const translations = {
         readyToScan: 'Listo para escanear',
         captureTooltip: 'Capturar imagen',
         priceNotDetected: 'Precio no detectado',
+        previewButton: 'Vista previa',
+        closeButton: 'Cerrar',
     },
     // ポルトガル語
     pt: {
@@ -462,6 +492,8 @@ export const translations = {
         readyToScan: 'Pronto para escanear',
         captureTooltip: 'Capturar imagem',
         priceNotDetected: 'Preço não detectado',
+        previewButton: 'Visualizar',
+        closeButton: 'Fechar',
     },
     // イタリア語
     it: {
@@ -491,6 +523,8 @@ export const translations = {
         readyToScan: 'Pronto per la scansione',
         captureTooltip: 'Cattura immagine',
         priceNotDetected: 'Prezzo non trovato',
+        previewButton: 'Anteprima',
+        closeButton: 'Chiudi',
     },
 };
 
