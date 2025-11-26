@@ -23,6 +23,9 @@ Thumbs.db
 __pycache__/
 *.pyc
 .venv/
+venv
+venv/
+backend/functions/venv/
 
 # Fonts
 backend/functions/fonts/
