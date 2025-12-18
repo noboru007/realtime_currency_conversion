@@ -1,4 +1,4 @@
-import React, { useRef, useLayoutEffect } from 'react';
+import React, { useRef, useLayoutEffect, useState } from 'react';
 import { useCurrencyStore } from '../store/useCurrencyStore';
 // import { useUIStore } from '../store/useUIStore';
 // import { formatCurrency } from '../utils/currency';
@@ -18,6 +18,14 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
   const { detections, capturedImage } = useCurrencyStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const [showOverlay, setShowOverlay] = useState(true);
+
+  // Toggle overlay visibility
+  const toggleOverlay = () => {
+    if (capturedImage) {
+      setShowOverlay((prev) => !prev);
+    }
+  };
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -42,6 +50,9 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
       
       // Clear previous drawings
       ctx.clearRect(0, 0, image.clientWidth, image.clientHeight);
+
+      // If overlay is hidden, stop here (canvas remains cleared)
+      if (!showOverlay) return;
 
       const { deviceOrientation } = useCurrencyStore.getState();
       const needsRotation = deviceOrientation === 'landscape';
@@ -192,12 +203,16 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
         }
     };
 
-  }, [detections, capturedImage]);
+  }, [detections, capturedImage, showOverlay]);
 
 
   return (
     <div className="middle-section">
-      <div className="camera-container">
+      <div 
+        className="camera-container" 
+        onClick={toggleOverlay} // Toggle overlay on click
+        style={{ cursor: capturedImage ? 'pointer' : 'default' }} // Change cursor to indicate interactability
+      >
         <video
           ref={videoRef}
           playsInline

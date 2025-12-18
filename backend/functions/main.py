@@ -323,7 +323,8 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 		print(f"--- [Job {job_id}] 2. Prompt generated. ---\n\n{prompt}")
 		
 		import time
-		model = genai.GenerativeModel('gemini-3-pro-preview')
+		model = genai.GenerativeModel('gemini-3-flash-preview')
+		# model = genai.GenerativeModel('gemini-3-pro-preview')
 		start_time = time.time()
 		response = model.generate_content(
 			contents=[prompt, img],
