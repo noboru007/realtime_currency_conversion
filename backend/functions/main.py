@@ -2,16 +2,16 @@ import base64
 import io
 import json
 import os
-import re
 import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
+
 import requests
 
 import firebase_admin
 from firebase_admin import firestore, initialize_app, storage
 from firebase_functions import firestore_fn, https_fn, options
-import google.generativeai as genai
+from google import genai
 from PIL import Image, ImageDraw, ImageFont
 
 # 定数
@@ -303,42 +303,72 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 			img = img.rotate(-90, expand=True)
 
 		api_key = os.getenv("GEMINI_API_KEY")
-		genai.configure(api_key=api_key)
+		client = genai.Client(api_key=api_key)
 		
 		prompt = f"""
 		Detect all items and their corresponding prices in this image.
-		Your response MUST be a valid JSON array of objects. Do not wrap it in markdown.
-		Each object in the array represents a detected pair and MUST contain the following four keys: "price_text", "price_box", "item_text", and "item_box".
 
-		- "price_text": Take the detected price. The result MUST be a numeric value only.
-		- "price_box": A list of 4 numbers for the price's bounding box [y_min, x_min, y_max, x_max], normalized to 1000.
-		- "item_text": Translate the item's name to {language}. If no corresponding item is found for a price, this MUST be an empty string "".
-		- "item_box": A list of 4 numbers for the item's bounding box. If no item is found, this MUST be an empty list [].
+		- "price_text": The detected price as a numeric value only.
+		- "price_box": Bounding box [y_min, x_min, y_max, x_max], normalized to 1000.
+		- "item_text": Translate the item's name to {language}. If no item found, use empty string.
+		- "item_box": Bounding box for the item. If no item found, use empty list.
 
 		IMPORTANT:
-		- ONLY include an object in the array if a "price_box" is clearly identified.
-		- If an item has a price, it MUST be included. If a price is visible but has no clear item, it MUST also be included (with empty "item_text" and "item_box").
-		- The "price_text" MUST be the converted value. Do not return the original detected price.
+		- ONLY include items where a price is clearly visible.
+		- If a price has no clear item, include it with empty item_text and item_box.
 		"""
 		print(f"--- [Job {job_id}] 2. Prompt generated. ---\n\n{prompt}")
 		
+		# Structured Output用のJSONスキーマを定義
+		response_schema = {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"properties": {
+					"price_text": {
+						"type": "number",
+						"description": "The detected price as a numeric value"
+					},
+					"price_box": {
+						"type": "array",
+						"items": {"type": "integer"},
+						"description": "Bounding box [y_min, x_min, y_max, x_max], normalized to 1000"
+					},
+					"item_text": {
+						"type": "string",
+						"description": "Translated item name, empty string if not found"
+					},
+					"item_box": {
+						"type": "array",
+						"items": {"type": "integer"},
+						"description": "Bounding box for item, empty array if not found"
+					}
+				},
+				"required": ["price_text", "price_box", "item_text", "item_box"],
+				"propertyOrdering": ["price_text", "price_box", "item_text", "item_box"]
+			}
+		}
+		
 		import time
-		model = genai.GenerativeModel('gemini-3-flash-preview')
-		# model = genai.GenerativeModel('gemini-3-pro-preview')
 		start_time = time.time()
-		response = model.generate_content(
+		
+		# 新SDKではPIL Imageを直接渡せる
+		response = client.models.generate_content(
+			model="gemini-3-flash-preview",
 			contents=[prompt, img],
-			generation_config=genai.GenerationConfig(temperature=0.5)
+			config={
+				"temperature": 0.5,
+				"response_mime_type": "application/json",
+				"response_json_schema": response_schema
+			}
 		)
 		elapsed_time = time.time() - start_time
 		print(f"--- [Job {job_id}] 3. Received response from Gemini. --- (elapsed: {elapsed_time:.2f}s\n{response.text})")
 		
 		client_detections = []
 		try:
-			bounding_boxes_text = response.text.strip()
-			match = re.search(r'```json\s*([\s\S]*?)\s*```', bounding_boxes_text, re.DOTALL)
-			json_str = match.group(1) if match else bounding_boxes_text
-			detected_pairs = json.loads(json_str) if json_str else []
+			# Structured Outputにより、response.textは常に有効なJSONが返される
+			detected_pairs = json.loads(response.text) if response.text else []
 			print(f"--- [Job {job_id}] 4. JSON parsed. Found {len(detected_pairs)} pairs. ---")
 			
 			if detected_pairs:
