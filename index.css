@@ -1,7 +1,8 @@
 :root {
   --background-color: #121212;
   --text-color: #e0e0e0;
-  --primary-color: #4ade80; /* 明るい緑 */
+  --primary-color: #4ade80;
+  /* 明るい緑 */
   --overlay-bg: rgba(28, 28, 30, 0.85);
   --border-radius-lg: 24px;
   --border-radius-md: 12px;
@@ -15,7 +16,9 @@
   padding: 0;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   width: 100%;
   overflow: hidden;
@@ -39,7 +42,6 @@ html, body, #root {
   z-index: 1;
 }
 
-/* ★★★ 以下を追加 ★★★ */
 /* --- Top Section (Notifications) --- */
 .top-section {
   position: absolute;
@@ -49,7 +51,7 @@ html, body, #root {
   width: calc(100% - 32px);
   max-width: 500px;
   z-index: 20;
-  pointer-events: none; /* 下の要素を操作できるように */
+  pointer-events: none;
   display: flex;
   justify-content: center;
 }
@@ -66,23 +68,24 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  pointer-events: auto; /* バナー自体は操作可能に */
+  pointer-events: auto;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .banner p {
   margin: 0;
   padding: 0;
-  white-space: pre-wrap; /* 改行とスペースを保持 */
-  word-break: break-word; /* 長い単語を折り返す */
+  white-space: pre-wrap;
+  word-break: break-word;
   margin-right: 12px;
 }
 
 .banner.error {
-  background-color: rgba(220, 38, 38, 0.8); /* エラー用の背景色 */
+  background-color: rgba(220, 38, 38, 0.8);
 }
+
 .banner.success {
-  background-color: rgba(74, 222, 128, 0.8); /* 成功用の背景色 */
+  background-color: rgba(74, 222, 128, 0.8);
 }
 
 .banner button {
@@ -94,7 +97,8 @@ html, body, #root {
   padding: 0 4px;
   line-height: 1;
 }
-/* ★★★ ここまで ★★★ */
+
+
 
 .camera-container {
   position: relative;
@@ -120,24 +124,24 @@ html, body, #root {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none; /* Allow clicks to pass through to elements below */
+  pointer-events: none;
 }
 
-.converted-amount { /* ← .detection-box のネストを解除 */
+.converted-amount {
   font-weight: bold;
   color: var(--primary-color);
-  text-shadow: 1px 1px 2px black; /* 影を両方に追加 */
-  white-space: nowrap; /* ★ 追加: テキストが改行されるのを防ぐ */
-  pointer-events: none; /* ★ 追加: テキストがクリックイベントを妨げないようにする */
+  text-shadow: 1px 1px 2px black;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
-.item-name { /* ← .detection-box のネストを解除 */
+.item-name {
   font-weight: 500;
   color: white;
   opacity: 0.9;
   text-shadow: 1px 1px 2px black;
-  white-space: nowrap; /* ★ 追加 */
-  pointer-events: none; /* ★ 追加 */
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* --- Global Overlays --- */
@@ -202,6 +206,7 @@ html, body, #root {
   z-index: 999;
   color: white;
 }
+
 .analyzing-spinner {
   border: 4px solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
@@ -211,10 +216,17 @@ html, body, #root {
   animation: spin 1s linear infinite;
   margin-bottom: 16px;
 }
+
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
+
 .analyzing-overlay p {
   font-size: 1.1rem;
 }
@@ -226,14 +238,14 @@ html, body, #root {
   left: 0;
   width: 100%;
   z-index: 20;
-  background: var(--overlay-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: transparent;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   border-top-left-radius: var(--border-radius-lg);
   border-top-right-radius: var(--border-radius-lg);
   padding: 4px;
-  background-color: rgba(24, 24, 27, 0.5); /* 0.8から0.5に変更 */
-  text-shadow: 1px 1px 2px black; /* 影を両方に追加 */
+  background-color: rgba(24, 24, 27, 0.15);
+  text-shadow: 1px 1px 2px black;
   box-sizing: border-box;
 }
 
@@ -259,15 +271,17 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1; /* 通貨セレクターが均等に幅を取るように */
+  flex: 1;
 }
+
 .currency-selector label {
   font-size: 0.75rem;
   opacity: 0.8;
   text-align: center;
 }
+
 .currency-selector select {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.05);
   color: var(--text-color);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--border-radius-sm);
@@ -284,9 +298,10 @@ html, body, #root {
   align-items: center;
   font-size: 0.75rem;
   white-space: nowrap;
-  padding: 24px 4px 0 8px; /* labelの高さ分を考慮して中央に配置 */
+  padding: 24px 4px 0 8px;
   flex-shrink: 0;
 }
+
 .exchange-rate-display span {
   line-height: 1.4;
 }
@@ -295,21 +310,20 @@ html, body, #root {
 /* --- 下段 --- */
 .controls-footer {
   display: flex;
-  /* justify-content: space-between; ← 削除 */
   align-items: center;
   width: 100%;
   gap: 12px;
 }
 
 .language-selector {
-  flex-basis: 120px; /* 言語セレクターの基本幅を指定 */
+  flex-basis: 120px;
   flex-shrink: 0;
   cursor: pointer;
   width: 100%;
 }
 
 .language-selector select {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.05);
   color: var(--text-color);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--border-radius-sm);
@@ -323,11 +337,11 @@ html, body, #root {
   text-align: right;
   font-size: 0.9em;
   opacity: 0.9;
-  /* max-width: 200px; */ /* ← 不要なので削除 */
+
   word-wrap: break-word;
   white-space: normal;
-  flex: 1; /* ★ 追加: 利用可能なスペースを埋める */
-  min-width: 0; /* ★ 追加: テキストの折り返しを許可 */
+  flex: 1;
+  min-width: 0;
 }
 
 /* --- Capture Button --- */
@@ -341,17 +355,19 @@ html, body, #root {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 4px; /* ★ 0から変更 */
+  padding: 4px;
   transition: background-color 0.2s ease;
   flex-shrink: 0;
   box-shadow: 0 0 0 3px #ffffff;
 }
+
 .capture-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   background-color: #a0a0a0;
   box-shadow: 0 0 0 3px #a0a0a0;
 }
+
 .capture-button svg {
   width: 40px;
   height: 40px;
@@ -368,14 +384,17 @@ html, body, #root {
   align-items: center;
   gap: 12px;
 }
+
 .confirmation-dialog p {
   font-size: 1rem;
   text-align: center;
 }
+
 .confirmation-buttons {
   display: flex;
   gap: 16px;
 }
+
 .confirmation-button {
   border: none;
   padding: 12px 24px;
@@ -384,10 +403,12 @@ html, body, #root {
   font-weight: bold;
   cursor: pointer;
 }
+
 .confirmation-button.yes {
   background-color: var(--primary-color);
   color: var(--background-color);
 }
+
 .confirmation-button.no {
   background-color: rgba(255, 255, 255, 0.2);
   color: white;

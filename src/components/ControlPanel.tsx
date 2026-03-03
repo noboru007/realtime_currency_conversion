@@ -1,17 +1,20 @@
-import React, { useEffect } from 'react'; // useEffectをインポート
+import React, { useEffect } from 'react';
 import { useCurrencyStore } from '../store/useCurrencyStore';
 import { useTranslationStore } from '../store/useTranslationStore';
-// useUIStoreはもう不要
 import { getExchangeRate } from '../utils/currency';
 import { supportedLanguages } from '../i18n/translations';
 
-// 新しい確認ボタン用のコンポーネント
-const ConfirmationButtons: React.FC = () => {
+interface ConfirmationButtonsProps {
+  onSaveImage: () => void;
+}
+
+const ConfirmationButtons: React.FC<ConfirmationButtonsProps> = ({ onSaveImage }) => {
   const { confirmationStep, performDetection, resetState } = useCurrencyStore();
   const { t, language } = useTranslationStore();
 
 
   if (!confirmationStep) return null;
+
 
   const handleYes = () => {
     if (confirmationStep === 'analyze') {
@@ -19,15 +22,10 @@ const ConfirmationButtons: React.FC = () => {
       const languageForPrompt = selectedLanguage ? selectedLanguage.promptName : 'English';
       performDetection(languageForPrompt);
     } else if (confirmationStep === 'save') {
-      if (window.saveARImage) {
-        window.saveARImage();
-      } else {
-        console.error("Save function not found.");
-        resetState(); // Fallback to reset state
-      }
+      onSaveImage();
     }
   };
-  
+
   const handleNo = () => {
     resetState();
   };
@@ -48,7 +46,8 @@ const ConfirmationButtons: React.FC = () => {
 
 interface ControlPanelProps {
   currencyOptions: string[];
-  onCapture: () => void; // ★ onCapture propの型定義を追加
+  onCapture: () => void;
+  onSaveImage: () => void;
 }
 
 const ExchangeRateDisplay: React.FC = () => {
@@ -66,7 +65,7 @@ const ExchangeRateDisplay: React.FC = () => {
 
     if (localToHome) {
       // ストアに計算結果を保存
-       // Local:USD, Home:JPYの時、1USDをより不利なレートで買うのでUSD/JPYのレートをaskで取得
+      // Local:USD, Home:JPYの時、1USDをより不利なレートで買うのでUSD/JPYのレートをaskで取得
       setCalculatedRates({ localToHome: localToHome.ask, homeToLocal: 1 / localToHome.ask });
     } else {
       setCalculatedRates({ localToHome: null, homeToLocal: null });
@@ -97,23 +96,20 @@ const ExchangeRateDisplay: React.FC = () => {
   );
 };
 
-export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onCapture }) => { // ★ onCaptureをpropsから受け取る
-  const { 
-    status, 
-    homeCurrency, 
-    localCurrency, 
-    setHomeCurrency, 
+export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onCapture, onSaveImage }) => {
+  const {
+    status,
+    homeCurrency,
+    localCurrency,
+    setHomeCurrency,
     setLocalCurrency,
     confirmationStep,
-    saveUserSettings // ★ 追加
+    saveUserSettings
   } = useCurrencyStore();
-  const { language, setLanguage } = useTranslationStore();
-  const { t } = useTranslationStore(); // ★ useTranslationフックからtを取得
-  // showBannerはもう不要
+  const { language, setLanguage, t } = useTranslationStore();
 
-  // homeCurrencyまたはlanguageが変更されたらFirestoreに保存する
+  // homeCurrencyまたはlanguageが変更されたらFirestoreに保存
   useEffect(() => {
-    // 初期化時（statusがloading）は保存しない
     if (status !== 'loading') {
       saveUserSettings();
     }
@@ -122,7 +118,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
   const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedCode = event.target.value;
     const selectedLanguage = supportedLanguages.find(lang => lang.code === selectedCode);
-    
+
     if (selectedLanguage) {
       setLanguage(selectedLanguage.code); // For UI translation
     }
@@ -134,8 +130,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
   const getStatusMessage = () => {
     if (status === 'loading') return t('loading');
     if (status === 'analyzing') return t('analyzing');
-    // 'processed' 状態は、ConfirmationButtonsが表示されるか、バナーが表示されるため、
-    // ここでは特別なメッセージは不要。'readyToScan' にフォールバックさせる。
     if (status === 'error') return t('errorOccurred');
     if (confirmationStep) return t('waitingForInput');
     return t('readyToScan');
@@ -146,10 +140,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
   return (
     <div className="bottom-section">
       {confirmationStep ? (
-        <ConfirmationButtons />
+        <ConfirmationButtons onSaveImage={onSaveImage} />
       ) : (
         <div className="controls">
-          {/* 上段: 通貨選択と為替レート */}
           <div className="controls-main">
             <div className="currency-selector">
               <label htmlFor="home-currency">{t('homeCurrencyLabel')}</label>
@@ -168,10 +161,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
             </div>
           </div>
 
-          {/* 下段: 言語、ステータス、ボタン */}
           <div className="controls-footer">
             <div className="language-selector">
-              {/* ラベルを削除 */}
               <select id="language-select" value={language} onChange={handleLanguageChange}>
                 {supportedLanguages.map(lang => (
                   <option key={lang.code} value={lang.code}>{lang.name}</option>
@@ -180,16 +171,16 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
             </div>
 
             <div className="status-bar">
-              <p>{getStatusMessage()}</p>                
+              <p>{getStatusMessage()}</p>
             </div>
             <button
-              id="capture-button" // IDを追加
-              className="capture-button" // クラス名を変更
+              id="capture-button"
+              className="capture-button"
               aria-label={t('captureTooltip')}
               disabled={isControlDisabled}
-              onClick={onCapture} // ★ onClickイベントハンドラを追加
+              onClick={onCapture}
             >
-              <svg xmlns="http://www.w.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>
             </button>
           </div>
         </div>
