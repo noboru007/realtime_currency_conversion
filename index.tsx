@@ -4,10 +4,10 @@ import './index.css';
 import { useCurrencyStore } from './src/store/useCurrencyStore';
 import { CameraView } from './src/components/CameraView';
 import { ControlPanel } from './src/components/ControlPanel';
+import { HamburgerMenu } from './src/components/HamburgerMenu';
 import { AnalyzingOverlay } from './src/components/AnalyzingOverlay';
 import { GlobalBanner } from './src/components/GlobalBanner';
 import { SaveConfirmationModal } from './src/components/SaveConfirmationModal';
-import { localeCurrencyMetadata } from './src/utils/currency';
 import { useCamera } from './src/hooks/useCamera';
 import { useSaveImage } from './src/hooks/useSaveImage';
 import { useInitialize } from './src/hooks/useInitialize';
@@ -52,7 +52,7 @@ const App: React.FC = () => {
 
     const screenOrientation = window.screen.orientation;
     screenOrientation.addEventListener('change', handleOrientationChange);
-    handleOrientationChange(); // 初期チェック
+    handleOrientationChange();
 
     return () => screenOrientation.removeEventListener('change', handleOrientationChange);
   }, []);
@@ -79,8 +79,8 @@ const App: React.FC = () => {
   return (
     <div className="app-container">
       <CameraView videoRef={videoRef} />
+      <HamburgerMenu currencyOptions={currencyOptions} />
       <ControlPanel
-        currencyOptions={currencyOptions}
         onCapture={handleCapture}
         onSaveImage={saveARImage}
       />

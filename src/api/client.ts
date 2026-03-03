@@ -50,7 +50,8 @@ export const apiClient = {
     language: string = 'English',
     localCurrency: string = '',
     exchangeRate: number | null = 1.0,
-    deviceOrientation: 'portrait' | 'landscape' = 'portrait'
+    deviceOrientation: 'portrait' | 'landscape' = 'portrait',
+    thinkingLevel: string = 'medium'
   ): Promise<DetectionResponse> {
     try {
       const response = await fetch(`${API_BASE_URL}/detectPrices`, {
@@ -61,10 +62,11 @@ export const apiClient = {
         body: JSON.stringify({
           image_data: imageData,
           target_currency: targetCurrency,
-          language: language, // ★ この行を復元
+          language: language,
           local_currency: localCurrency,
           exchange_rate: exchangeRate || 1.0,
           device_orientation: deviceOrientation,
+          thinking_level: thinkingLevel,
         }),
       });
 
@@ -73,9 +75,9 @@ export const apiClient = {
         const contentType = response.headers.get("content-type");
         if (contentType && contentType.indexOf("application/json") !== -1) {
           try {
-              errorBody = await response.json();
+            errorBody = await response.json();
           } catch (e) {
-              console.error("Failed to parse JSON error response:", e);
+            console.error("Failed to parse JSON error response:", e);
           }
         }
         const error: any = new Error(errorBody.message || 'API request failed');

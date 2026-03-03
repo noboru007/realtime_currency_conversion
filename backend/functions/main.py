@@ -149,6 +149,7 @@ def detectPrices(req: https_fn.Request) -> https_fn.Response:
             'localCurrency': request_json.get('local_currency', ''),
             'exchangeRate': request_json.get('exchange_rate') or 1.0,
             'deviceOrientation': request_json.get('device_orientation', 'portrait'),
+            'thinkingLevel': request_json.get('thinking_level', 'medium'),
         })
 
         return https_fn.Response(
@@ -209,6 +210,7 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             exchange_rate=job_data.get('exchangeRate') or 1.0,
             device_orientation=job_data.get('deviceOrientation', 'portrait'),
             job_id=job_id,
+            thinking_level=job_data.get('thinkingLevel', 'medium'),
         )
 
         # 結果をFirestoreに書き込み

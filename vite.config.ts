@@ -35,7 +35,22 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+          navigateFallback: null,
+          runtimeCaching: [
+            {
+              urlPattern: /.*/,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'all-resources',
+                expiration: {
+                  maxEntries: 50,
+                  maxAgeSeconds: 60 * 60, // 1 hour
+                },
+                networkTimeoutSeconds: 5,
+              },
+            },
+          ],
         }
       }),
       // basicSsl(), // ★ この行をコメントアウト

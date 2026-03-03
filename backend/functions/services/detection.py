@@ -44,14 +44,23 @@ def build_detection_prompt(language: str) -> str:
     """Gemini API用の検出プロンプトを生成する"""
     return f"""Detect all items and their corresponding prices in this image.
 
-- "price_text": The detected price as a numeric value only.
+- "price_text": The detected price as a numeric value only (use standard decimal notation with a dot as decimal separator).
 - "price_box": Bounding box [y_min, x_min, y_max, x_max], normalized to 1000.
 - "item_text": Translate the item's name to {language}. If no item found, use empty string.
 - "item_box": Bounding box for the item. If no item found, use empty list.
 
 IMPORTANT:
 - ONLY include items where a price is clearly visible.
-- If a price has no clear item, include it with empty item_text and item_box."""
+- If a price has no clear item, include it with empty item_text and item_box.
+
+NUMBER FORMAT WARNING:
+- Many countries use periods (.) as THOUSAND separators, NOT as decimal points.
+  Examples: "1.990" in Iceland/many European countries means 1990, NOT 1.99.
+- Some countries use commas (,) as decimal separators.
+  Examples: "12,50" in Germany means 12.50, NOT 1250.
+- Consider the context (country, currency, typical price ranges for the items) to correctly interpret the number format.
+- Currencies like ISK, KRW, VND, IDR, JPY typically have NO decimal places, so any dot is almost certainly a thousand separator.
+- Always return the actual numeric value in standard notation (e.g., 1990 not 1.990)."""
 
 
 def detect_prices_from_image(
@@ -62,6 +71,7 @@ def detect_prices_from_image(
     exchange_rate: float,
     device_orientation: str,
     job_id: str,
+    thinking_level: str = 'medium',
 ) -> list[dict]:
     """画像から価格を検出し、変換済みの検出結果リストを返す
 
@@ -92,7 +102,8 @@ def detect_prices_from_image(
         model="gemini-3-flash-preview",
         contents=[prompt, img],
         config={
-            "temperature": 0.5,
+            "temperature": 1,
+            "thinking_config": {"thinking_level": thinking_level},
             "response_mime_type": "application/json",
             "response_json_schema": DETECTION_RESPONSE_SCHEMA,
         },

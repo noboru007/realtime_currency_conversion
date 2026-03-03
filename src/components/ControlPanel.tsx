@@ -1,7 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useCurrencyStore } from '../store/useCurrencyStore';
 import { useTranslationStore } from '../store/useTranslationStore';
-import { getExchangeRate } from '../utils/currency';
 import { supportedLanguages } from '../i18n/translations';
 
 interface ConfirmationButtonsProps {
@@ -12,9 +11,7 @@ const ConfirmationButtons: React.FC<ConfirmationButtonsProps> = ({ onSaveImage }
   const { confirmationStep, performDetection, resetState } = useCurrencyStore();
   const { t, language } = useTranslationStore();
 
-
   if (!confirmationStep) return null;
-
 
   const handleYes = () => {
     if (confirmationStep === 'analyze') {
@@ -43,89 +40,14 @@ const ConfirmationButtons: React.FC<ConfirmationButtonsProps> = ({ onSaveImage }
   );
 };
 
-
 interface ControlPanelProps {
-  currencyOptions: string[];
   onCapture: () => void;
   onSaveImage: () => void;
 }
 
-const ExchangeRateDisplay: React.FC = () => {
-  const { rates, homeCurrency, localCurrency, setCalculatedRates, localToHomeRate, homeToLocalRate } = useCurrencyStore();
+export const ControlPanel: React.FC<ControlPanelProps> = ({ onCapture, onSaveImage }) => {
+  const { status, confirmationStep } = useCurrencyStore();
   const { t } = useTranslationStore();
-
-  React.useEffect(() => {
-    if (!rates || !localCurrency || !homeCurrency || localCurrency === homeCurrency) {
-      setCalculatedRates({ localToHome: null, homeToLocal: null });
-      return;
-    }
-
-    const localToHome = getExchangeRate(localCurrency, homeCurrency, rates);
-    // const homeToLocal = getExchangeRate(homeCurrency, localCurrency, rates);
-
-    if (localToHome) {
-      // ストアに計算結果を保存
-      // Local:USD, Home:JPYの時、1USDをより不利なレートで買うのでUSD/JPYのレートをaskで取得
-      setCalculatedRates({ localToHome: localToHome.ask, homeToLocal: 1 / localToHome.ask });
-    } else {
-      setCalculatedRates({ localToHome: null, homeToLocal: null });
-    }
-  }, [rates, localCurrency, homeCurrency, setCalculatedRates]);
-
-  if (localToHomeRate === null || homeToLocalRate === null) {
-    return <div className="exchange-rate-display">{t('rateInfoUnavailable')}</div>;
-  }
-
-  const getAdjustedRate = (rate: number) => {
-    // レートが0.01未満の場合、100単位で表示
-    if (rate < 0.01) {
-      return { unit: 100, value: (rate * 100).toFixed(4) };
-    }
-    // それ以外の場合は1単位で表示
-    return { unit: 1, value: rate.toFixed(4) };
-  };
-
-  const localRateDisplay = getAdjustedRate(localToHomeRate);
-  const homeRateDisplay = getAdjustedRate(homeToLocalRate);
-
-  return (
-    <div className="exchange-rate-display">
-      <span>{localRateDisplay.unit} {localCurrency} ≈ {localRateDisplay.value} {homeCurrency}</span>
-      <span>{homeRateDisplay.unit} {homeCurrency} ≈ {homeRateDisplay.value} {localCurrency}</span>
-    </div>
-  );
-};
-
-export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onCapture, onSaveImage }) => {
-  const {
-    status,
-    homeCurrency,
-    localCurrency,
-    setHomeCurrency,
-    setLocalCurrency,
-    confirmationStep,
-    saveUserSettings
-  } = useCurrencyStore();
-  const { language, setLanguage, t } = useTranslationStore();
-
-  // homeCurrencyまたはlanguageが変更されたらFirestoreに保存
-  useEffect(() => {
-    if (status !== 'loading') {
-      saveUserSettings();
-    }
-  }, [homeCurrency, language, saveUserSettings, status]);
-
-  const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedCode = event.target.value;
-    const selectedLanguage = supportedLanguages.find(lang => lang.code === selectedCode);
-
-    if (selectedLanguage) {
-      setLanguage(selectedLanguage.code); // For UI translation
-    }
-    else {
-      console.log("No language found for code:", selectedCode);
-    }
-  };
 
   const getStatusMessage = () => {
     if (status === 'loading') return t('loading');
@@ -143,33 +65,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ currencyOptions, onC
         <ConfirmationButtons onSaveImage={onSaveImage} />
       ) : (
         <div className="controls">
-          <div className="controls-main">
-            <div className="currency-selector">
-              <label htmlFor="home-currency">{t('homeCurrencyLabel')}</label>
-              <select id="home-currency" value={homeCurrency} onChange={(e) => setHomeCurrency(e.target.value)} disabled={isControlDisabled}>
-                {currencyOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-
-            <ExchangeRateDisplay />
-
-            <div className="currency-selector">
-              <label htmlFor="local-currency">{t('localCurrencyLabel')}</label>
-              <select id="local-currency" value={localCurrency} onChange={(e) => setLocalCurrency(e.target.value)} disabled={isControlDisabled}>
-                {currencyOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-
           <div className="controls-footer">
-            <div className="language-selector">
-              <select id="language-select" value={language} onChange={handleLanguageChange}>
-                {supportedLanguages.map(lang => (
-                  <option key={lang.code} value={lang.code}>{lang.name}</option>
-                ))}
-              </select>
-            </div>
-
             <div className="status-bar">
               <p>{getStatusMessage()}</p>
             </div>

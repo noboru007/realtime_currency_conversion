@@ -37,9 +37,11 @@ interface CurrencyState {
   isSaveModalOpen: boolean;
   savedImageURL: string | null;
   deviceOrientation: 'portrait' | 'landscape';
+  thinkingLevel: string;
 
   // 状態を更新するためのアクション
   setUserId: (userId: string) => void;
+  setThinkingLevel: (level: string) => void;
   setStatus: (status: CurrencyState['status']) => void;
   setBanner: (banner: Banner | null) => void;
   setCapturedImage: (image: string | null) => void;
@@ -85,9 +87,11 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   isSaveModalOpen: false,
   savedImageURL: null,
   deviceOrientation: 'portrait',
+  thinkingLevel: 'medium',
 
   // --- 状態更新アクション ---
   setUserId: (userId) => set({ userId }),
+  setThinkingLevel: (level) => set({ thinkingLevel: level }),
   setStatus: (status) => set({ status }),
   setBanner: (banner) => set({ banner }),
   setCapturedImage: (image) => set({ capturedImage: image, detections: [] }),
@@ -180,7 +184,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   },
 
   performDetection: async (language) => {
-    const { capturedImage, homeCurrency, localCurrency, localToHomeRate, deviceOrientation, resetState } = get();
+    const { capturedImage, homeCurrency, localCurrency, localToHomeRate, deviceOrientation, thinkingLevel, resetState } = get();
 
     if (!capturedImage) return;
 
@@ -194,7 +198,8 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
         language,
         localCurrency,
         localToHomeRate,
-        deviceOrientation
+        deviceOrientation,
+        thinkingLevel
       );
 
       if (response.success && response.jobId) {
