@@ -75,9 +75,12 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ currencyOptions })
         if (selected) setLanguage(selected.code);
     };
 
-    const getAdjustedRate = (rate: number) => {
-        if (rate < 0.01) return { unit: 100, value: (rate * 100).toFixed(4) };
-        return { unit: 1, value: rate.toFixed(4) };
+    // レートが小さすぎる場合は100通貨単位で表示する（例: 100 JPY ≈ 0.67 USD）
+    const formatRate = (rate: number, from: string, to: string) => {
+        const { unit, value } = rate < 0.01
+            ? { unit: 100, value: (rate * 100).toFixed(4) }
+            : { unit: 1, value: rate.toFixed(4) };
+        return `${unit} ${from} ≈ ${value} ${to}`;
     };
 
     return (
@@ -121,8 +124,8 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ currencyOptions })
                 {/* 為替レート表示 */}
                 {localToHomeRate !== null && homeToLocalRate !== null && (
                     <div className="menu-section menu-rates">
-                        <span>{getAdjustedRate(localToHomeRate).unit} {localCurrency} ≈ {getAdjustedRate(localToHomeRate).value} {homeCurrency}</span>
-                        <span>{getAdjustedRate(homeToLocalRate).unit} {homeCurrency} ≈ {getAdjustedRate(homeToLocalRate).value} {localCurrency}</span>
+                        <span>{formatRate(localToHomeRate, localCurrency, homeCurrency)}</span>
+                        <span>{formatRate(homeToLocalRate, homeCurrency, localCurrency)}</span>
                     </div>
                 )}
 

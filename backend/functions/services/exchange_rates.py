@@ -2,7 +2,6 @@
 
 import json
 import os
-import traceback
 from datetime import datetime, timedelta, timezone
 
 import requests

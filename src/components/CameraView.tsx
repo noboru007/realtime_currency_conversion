@@ -1,18 +1,79 @@
 import React, { useRef, useLayoutEffect, useState } from 'react';
 import { useCurrencyStore } from '../store/useCurrencyStore';
-// import { useUIStore } from '../store/useUIStore';
-// import { formatCurrency } from '../utils/currency';
-
-interface BoundingBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
 interface CameraViewProps {
   videoRef: React.RefObject<HTMLVideoElement>;
 }
+
+const LABEL_FONT_FAMILY = '"Noto Sans JP", sans-serif';
+const PRICE_TEXT_COLOR = '#FFFF66'; // やや彩度のある淡い黄色（黒縁取りと合わせて視認性を確保）
+const ITEM_TEXT_COLOR = 'white';
+
+/**
+ * 検出結果のラベルをバウンディングボックスの中央に描画する。
+ * 座標はctx.scale(dpr, dpr)適用済みの論理ピクセル空間で扱う。
+ */
+const drawDetectionLabel = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  box: number[],
+  scaleX: number,
+  scaleY: number,
+  isPrice: boolean
+) => {
+  const [yMin, xMin, yMax, xMax] = box;
+
+  const left = xMin / 1000 * scaleX;
+  const top = yMin / 1000 * scaleY;
+  const width = (xMax - xMin) / 1000 * scaleX;
+  const height = (yMax - yMin) / 1000 * scaleY;
+
+  const isVertical = height > width;
+
+  ctx.save();
+
+  // フォントサイズはボックスの高さに応じて決定（読みやすさのため下限14px・上限24px）
+  let fontSize = Math.min(height * 0.6, 24);
+  fontSize = Math.max(fontSize, 14);
+
+  ctx.font = `bold ${fontSize}px ${LABEL_FONT_FAMILY}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // テキストがボックス幅に収まらない場合は縮小（下限11px）
+  const paddingX = 12;
+  const availableWidth = isVertical ? height : width;
+  const textWidth = ctx.measureText(text).width;
+
+  if (textWidth > availableWidth - paddingX * 2) {
+    const scaleFactor = (availableWidth - paddingX * 2) / textWidth;
+    fontSize = Math.max(Math.floor(fontSize * scaleFactor), 11);
+    ctx.font = `bold ${fontSize}px ${LABEL_FONT_FAMILY}`;
+  }
+
+  // バウンディングボックスの中心
+  const centerX = left + width / 2;
+  const centerY = top + height / 2;
+
+  // 黒縁取り＋塗りつぶしのスタイル設定
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+  ctx.fillStyle = isPrice ? PRICE_TEXT_COLOR : ITEM_TEXT_COLOR;
+
+  if (isVertical) {
+    ctx.translate(centerX, centerY);
+    ctx.rotate(Math.PI / 2);
+    ctx.strokeText(text, 0, 0);
+    ctx.fillText(text, 0, 0);
+  } else {
+    ctx.strokeText(text, centerX, centerY);
+    ctx.fillText(text, centerX, centerY);
+  }
+
+  ctx.restore();
+};
 
 export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
   const { detections, capturedImage } = useCurrencyStore();
@@ -20,7 +81,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
   const imageRef = useRef<HTMLImageElement>(null);
   const [showOverlay, setShowOverlay] = useState(true);
 
-  // Toggle overlay visibility
+  // キャプチャ画像タップでオーバーレイの表示/非表示を切り替え
   const toggleOverlay = () => {
     if (capturedImage) {
       setShowOverlay((prev) => !prev);
@@ -34,184 +95,74 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
 
     if (!canvas || !ctx || !image) return;
 
-    const handleImageLoad = () => {
+    const drawOverlay = () => {
       const dpr = window.devicePixelRatio || 1;
-      
-      // Set canvas dimensions to match the displayed image size, scaled by DPR
+
+      // 表示中の画像サイズに合わせてキャンバスを設定（DPRでスケール）
       canvas.width = image.clientWidth * dpr;
       canvas.height = image.clientHeight * dpr;
-      
-      // Set display size (css)
       canvas.style.width = `${image.clientWidth}px`;
       canvas.style.height = `${image.clientHeight}px`;
 
-      // Scale all drawing operations by dpr
+      // 以降の描画は論理ピクセル（CSSピクセル）空間で行う
       ctx.scale(dpr, dpr);
-      
-      // Clear previous drawings
       ctx.clearRect(0, 0, image.clientWidth, image.clientHeight);
 
-      // If overlay is hidden, stop here (canvas remains cleared)
-      if (!showOverlay) return;
+      // オーバーレイ非表示の場合はクリアのみで終了
+      if (!showOverlay || detections.length === 0) return;
 
       const { deviceOrientation } = useCurrencyStore.getState();
       const needsRotation = deviceOrientation === 'landscape';
-      
-      // Note: Coordinate transformations below operate in the logical pixel space (CSS pixels)
-      // because we already applied ctx.scale(dpr, dpr).
-      
+
       if (needsRotation) {
         ctx.save();
         ctx.translate(image.clientWidth / 2, image.clientHeight / 2);
-        ctx.rotate(Math.PI / 2); // 90 degrees clockwise
+        ctx.rotate(Math.PI / 2); // 時計回りに90度
         ctx.translate(-image.clientHeight / 2, -image.clientWidth / 2);
       }
 
-      if (detections && detections.length > 0) {
-        // Adjust scale factors based on rotation
-        // logical dimensions are used for calculation
-        const scaleX = needsRotation ? image.clientHeight : image.clientWidth;
-        const scaleY = needsRotation ? image.clientWidth : image.clientHeight;
+      // 回転時は幅と高さを入れ替えてスケールを計算
+      const scaleX = needsRotation ? image.clientHeight : image.clientWidth;
+      const scaleY = needsRotation ? image.clientWidth : image.clientHeight;
 
-        // 1. Draw Items first (Background layer)
-        detections.forEach(({ itemText, itemBox }) => {
-          if (itemText && itemBox && itemBox.length === 4) {
-            drawDetection(ctx, itemText, itemBox, scaleX, scaleY, false);
-          }
-        });
+      // 1. 商品名を先に描画（背面レイヤー）
+      detections.forEach(({ itemText, itemBox }) => {
+        if (itemText && itemBox && itemBox.length === 4) {
+          drawDetectionLabel(ctx, itemText, itemBox, scaleX, scaleY, false);
+        }
+      });
 
-        // 2. Draw Prices second (Foreground layer)
-        detections.forEach(({ priceText, priceBox }) => {
-          if (priceText && priceBox && priceBox.length === 4) {
-            drawDetection(ctx, priceText, priceBox, scaleX, scaleY, true);
-          }
-        });
-      }
+      // 2. 価格を後に描画（前面レイヤー）
+      detections.forEach(({ priceText, priceBox }) => {
+        if (priceText && priceBox && priceBox.length === 4) {
+          drawDetectionLabel(ctx, priceText, priceBox, scaleX, scaleY, true);
+        }
+      });
 
       if (needsRotation) {
         ctx.restore();
       }
     };
 
-    const drawDetection = (
-        ctx: CanvasRenderingContext2D,
-        text: string,
-        box: number[],
-        scaleX: number,
-        scaleY: number,
-        isPrice: boolean
-    ) => {
-        const [yMin, xMin, yMax, xMax] = box;
-
-        const left = xMin / 1000 * scaleX;
-        const top = yMin / 1000 * scaleY;
-        const width = (xMax - xMin) / 1000 * scaleX;
-        const height = (yMax - yMin) / 1000 * scaleY;
-        
-        const isVertical = height > width;
-
-        ctx.save();
-
-        // 1. Calculate Max Allowed Dimensions
-        const maxLabelWidth = Math.max(width, 40);
-        // const maxLabelHeight = Math.max(height, 20); // Not strictly used below, but good reference
-
-        // 2. Initial Font Size Calculation (Bounded)
-        let fontSize = Math.min(height * 0.6, 24); 
-        fontSize = Math.max(fontSize, 14); // Slightly larger min size for readability
-
-        ctx.font = `bold ${fontSize}px "Noto Sans JP", sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        // 3. Measure and Scale Down if Text is Too Wide
-        let textMetrics = ctx.measureText(text);
-        let textWidth = textMetrics.width;
-        const paddingX = 12; // Increased horizontal padding
-        const paddingY = 8;  // Vertical padding
-        
-        const availableWidth = isVertical ? height : width;
-        
-        // If text is wider than the box, scale down
-        if (textWidth > availableWidth - paddingX * 2) {
-            const scaleFactor = (availableWidth - paddingX * 2) / textWidth;
-            fontSize = Math.floor(fontSize * scaleFactor);
-            fontSize = Math.max(fontSize, 11); // Minimum legible size
-            ctx.font = `bold ${fontSize}px "Noto Sans JP", sans-serif`;
-            
-            textMetrics = ctx.measureText(text);
-            textWidth = textMetrics.width;
-        }
-
-        const textHeight = fontSize * 1.4; // Add vertical padding relative to font size
-
-        // Center of the bounding box
-        const centerX = left + width / 2;
-        const centerY = top + height / 2;
-
-        // Text Outline Settings (White Text with Black Outline)
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 3;
-        ctx.lineJoin = 'round';
-        ctx.miterLimit = 2;
-        
-        // Change text color based on type: Price = Light Yellow, Item = White
-        ctx.fillStyle = isPrice ? '#FFEB3B' : 'white'; // Material Design Yellow 500 is a bit strong, maybe 200 or 300
-        // Let's use a standard bright yellow for high visibility against the black stroke
-        // #FFFF00 (Pure Yellow) might be too harsh. #FFF176 (Yellow 300) is nice.
-        // User asked for "Pale Yellow" -> #FFFFCC or #FFF9C4
-        // But for AR text, slightly more saturated is better for readability. 
-        // Let's try #FFEE58 (Yellow 400) or just keeps it simple #FFFF99
-        
-        ctx.fillStyle = isPrice ? '#FFFF66' : 'white'; // Slightly saturated pale yellow
-
-        ctx.shadowColor = 'transparent'; // No shadow for this style
-
-        if (isVertical) {
-            ctx.translate(centerX, centerY);
-            ctx.rotate(Math.PI / 2);
-            
-            // Draw Stroke (Outline)
-            ctx.strokeText(text, 0, 0);
-            // Draw Fill (Text)
-            ctx.fillText(text, 0, 0);
-
-        } else {
-            // Draw Stroke (Outline)
-            ctx.strokeText(text, centerX, centerY);
-            // Draw Fill (Text)
-            ctx.fillText(text, centerX, centerY);
-        }
-
-        ctx.restore();
-    };
-
-
-    if (image) {
-        if (image.complete) {
-            handleImageLoad();
-        } else {
-            image.onload = handleImageLoad;
-        }
+    if (image.complete) {
+      drawOverlay();
+    } else {
+      image.onload = drawOverlay;
     }
-    // Also handle window resize to adjust canvas overlay
-    window.addEventListener('resize', handleImageLoad);
+    // ウィンドウリサイズ時もオーバーレイを再描画
+    window.addEventListener('resize', drawOverlay);
     return () => {
-        window.removeEventListener('resize', handleImageLoad);
-        if (image) {
-            image.onload = null;
-        }
+      window.removeEventListener('resize', drawOverlay);
+      image.onload = null;
     };
-
   }, [detections, capturedImage, showOverlay]);
-
 
   return (
     <div className="middle-section">
-      <div 
-        className="camera-container" 
-        onClick={toggleOverlay} // Toggle overlay on click
-        style={{ cursor: capturedImage ? 'pointer' : 'default' }} // Change cursor to indicate interactability
+      <div
+        className="camera-container"
+        onClick={toggleOverlay}
+        style={{ cursor: capturedImage ? 'pointer' : 'default' }}
       >
         <video
           ref={videoRef}
@@ -223,15 +174,15 @@ export const CameraView: React.FC<CameraViewProps> = ({ videoRef }) => {
         />
         {capturedImage && (
           <>
-            <img 
+            <img
               ref={imageRef}
-              src={capturedImage} 
-              alt="Captured frame" 
-              className="captured-image" 
+              src={capturedImage}
+              alt="Captured frame"
+              className="captured-image"
             />
-            <canvas 
-              ref={canvasRef} 
-              className="overlay-canvas" 
+            <canvas
+              ref={canvasRef}
+              className="overlay-canvas"
             />
           </>
         )}

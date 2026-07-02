@@ -2,10 +2,13 @@
 import { create } from 'zustand';
 import { apiClient, RateData } from '../api/client';
 import { useTranslationStore } from './useTranslationStore';
-import { db } from '../firebase'; // Firebaseの初期化をインポート
-import { doc, onSnapshot, Unsubscribe, getDoc, setDoc, serverTimestamp } from "firebase/firestore"; // Firestore関連の関数をインポート
+import { db } from '../firebase';
+import { doc, onSnapshot, Unsubscribe, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-// バナーの型定義
+// ユーザー設定の有効期限（7日間）
+const USER_SETTINGS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// バナーの型定義（messageには翻訳キーを渡す）
 interface Banner {
   message: string;
   type: 'error' | 'warning' | 'info';
@@ -66,8 +69,6 @@ interface CurrencyState {
   setCalculatedRates: (rates: { localToHome: number | null, homeToLocal: number | null }) => void;
 }
 
-let bannerTimeout: NodeJS.Timeout | null = null;
-
 // ストアを作成
 export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   // --- 初期状態 ---
@@ -115,11 +116,10 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
       if (docSnap.exists()) {
         const settings = docSnap.data();
         const updatedAt = settings.updatedAt?.toDate();
-        if (updatedAt && (new Date().getTime() - updatedAt.getTime()) < 7 * 24 * 60 * 60 * 1000) {
-          // 7日以内の設定があれば適用
+        if (updatedAt && (Date.now() - updatedAt.getTime()) < USER_SETTINGS_TTL_MS) {
+          // 有効期限内の設定があれば適用
           if (settings.homeCurrency) set({ homeCurrency: settings.homeCurrency });
           if (settings.language) useTranslationStore.getState().setLanguage(settings.language);
-          // console.log("Loaded user settings from Firestore:", settings);
           return true;
         }
       }
@@ -141,7 +141,6 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
         language,
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      console.log("Saved user settings to Firestore.");
     } catch (error) {
       console.error("Error saving user settings:", error);
     }
@@ -151,40 +150,34 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
     try {
       const data = await apiClient.getExchangeRates();
       if (data.rates && data.base_currency === 'USD') {
-        set({ rates: data.rates });
+        set({ rates: data.rates, banner: null });
         localStorage.setItem('cachedRates', JSON.stringify(data.rates));
-        set({ banner: null });
       } else {
         throw new Error('Fetched rates data is not in the expected format.');
       }
     } catch (error) {
       console.warn('Failed to fetch new rates, attempting to load from cache.', error);
       const cachedRatesJson = localStorage.getItem('cachedRates');
-      if (cachedRatesJson) {
-        try {
-          const cachedRates = JSON.parse(cachedRatesJson);
-          // 簡単なキャッシュの形式チェック
-          const firstKey = Object.keys(cachedRates)[0];
-          if (firstKey && cachedRates[firstKey].hasOwnProperty('bid')) {
-            set({ rates: cachedRates });
-            // 以下の行を削除またはコメントアウト
-            // set({ banner: { message: 'rateFetchFailedCacheUsed', type: 'warning' } });
-          } else {
-            // 古い形式のキャッシュは使えないのでエラーとする
-            localStorage.removeItem('cachedRates');
-            throw new Error('Cached rates data is outdated format.');
-          }
-        } catch (cacheError) {
-          set({ status: 'error', banner: { message: 'rateFetchFailedNoCache', type: 'error' } });
+      try {
+        if (!cachedRatesJson) {
+          throw new Error('No cached rates available.');
         }
-      } else {
+        const cachedRates = JSON.parse(cachedRatesJson);
+        // 簡単なキャッシュの形式チェック（bid/ask形式でない古いキャッシュは破棄）
+        const firstKey = Object.keys(cachedRates)[0];
+        if (!firstKey || !cachedRates[firstKey].hasOwnProperty('bid')) {
+          localStorage.removeItem('cachedRates');
+          throw new Error('Cached rates data is outdated format.');
+        }
+        set({ rates: cachedRates });
+      } catch (cacheError) {
         set({ status: 'error', banner: { message: 'rateFetchFailedNoCache', type: 'error' } });
       }
     }
   },
 
   performDetection: async (language) => {
-    const { capturedImage, homeCurrency, localCurrency, localToHomeRate, deviceOrientation, thinkingLevel, resetState } = get();
+    const { capturedImage, homeCurrency, localCurrency, localToHomeRate, deviceOrientation, thinkingLevel } = get();
 
     if (!capturedImage) return;
 
@@ -192,15 +185,15 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
 
     try {
       // 1. ジョブの開始リクエストを送信
-      const response = await apiClient.detectPrices(
-        capturedImage,
-        homeCurrency,
+      const response = await apiClient.detectPrices({
+        imageData: capturedImage,
+        targetCurrency: homeCurrency,
         language,
         localCurrency,
-        localToHomeRate,
+        exchangeRate: localToHomeRate,
         deviceOrientation,
-        thinkingLevel
-      );
+        thinkingLevel,
+      });
 
       if (response.success && response.jobId) {
         // 2. jobIdをセットし、Firestoreの監視を開始
@@ -209,7 +202,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
       } else {
         throw new Error(response.error || 'Failed to start detection job.');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Failed to perform detection:", error);
       get().showBanner('priceDetectionError', 'error');
       set({ status: 'running' });
@@ -218,43 +211,39 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
 
   listenToJobUpdates: (jobId) => {
     // 既存の監視があれば解除
-    const { unsubscribe } = get();
-    if (unsubscribe) {
-      unsubscribe();
-    }
+    get().unsubscribe?.();
 
     const unsub = onSnapshot(doc(db, "detectionJobs", jobId),
       (doc) => {
-        if (doc.exists()) {
-          const jobStatus = doc.get("status");
-          switch (jobStatus) {
-            case 'completed':
-              // .get()を使ってフィールドを明示的に取得する
-              const detections = doc.get("detections") || [];
-              set({
-                detections: detections,
-                status: 'processed',
-              });
-              if (detections.length > 0) {
-                set({ confirmationStep: 'save' });
-              } else {
-                get().showBanner('priceNotDetected', 'warning');
-              }
-              unsub();
-              set({ unsubscribe: null });
-              break;
-            case 'error':
-              console.error("Detection job failed in backend:", doc.get("error"));
-              get().showBanner('priceDetectionError', 'error');
-              set({ status: 'running' });
-              unsub();
-              set({ unsubscribe: null });
-              break;
-            case 'processing':
-            case 'pending':
-              // 処理中は特に何もしない（UIは'analyzing'のまま）
-              break;
+        if (!doc.exists()) return;
+
+        const stopListening = () => {
+          unsub();
+          set({ unsubscribe: null });
+        };
+
+        switch (doc.get("status")) {
+          case 'completed': {
+            const detections: Detection[] = doc.get("detections") || [];
+            set({ detections, status: 'processed' });
+            if (detections.length > 0) {
+              set({ confirmationStep: 'save' });
+            } else {
+              get().showBanner('priceNotDetected', 'warning');
+            }
+            stopListening();
+            break;
           }
+          case 'error':
+            console.error("Detection job failed in backend:", doc.get("error"));
+            get().showBanner('priceDetectionError', 'error');
+            set({ status: 'running' });
+            stopListening();
+            break;
+          case 'processing':
+          case 'pending':
+            // 処理中は特に何もしない（UIは'analyzing'のまま）
+            break;
         }
       },
       (error) => {
@@ -270,10 +259,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   },
 
   resetState: () => {
-    const { unsubscribe } = get();
-    if (unsubscribe) {
-      unsubscribe();
-    }
+    get().unsubscribe?.();
     set({
       banner: null,
       capturedImage: null,
@@ -288,13 +274,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
     });
   },
 
-  showBanner: (message, type) => {
-    if (bannerTimeout) {
-      clearTimeout(bannerTimeout);
-      bannerTimeout = null;
-    }
-    set({ banner: { message, type } });
-  },
+  showBanner: (message, type) => set({ banner: { message, type } }),
 
   hideBanner: () => {
     get().resetState();
