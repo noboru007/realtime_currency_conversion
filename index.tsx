@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import { useCurrencyStore } from './src/store/useCurrencyStore';
@@ -11,6 +11,15 @@ import { SaveConfirmationModal } from './src/components/SaveConfirmationModal';
 import { useCamera } from './src/hooks/useCamera';
 import { useSaveImage } from './src/hooks/useSaveImage';
 import { useInitialize } from './src/hooks/useInitialize';
+
+// 選択リストの先頭に表示する優先通貨
+const PRIORITY_CURRENCIES = [
+  'EUR', 'GBP', 'USD', 'JPY',
+  'CNY', 'HKD', 'IDR', 'INR', 'KRW', 'MYR',
+  'PHP', 'SGD', 'THB', 'TWD', 'VND', 'ISK'
+].sort();
+
+const FALLBACK_CURRENCIES = ['USD', 'EUR', 'JPY'];
 
 const App: React.FC = () => {
   const {
@@ -57,24 +66,17 @@ const App: React.FC = () => {
     return () => screenOrientation.removeEventListener('change', handleOrientationChange);
   }, []);
 
-  // 優先通貨リスト
-  const priorityCurrencies = [
-    'EUR', 'GBP', 'USD', 'JPY',
-    'CNY', 'HKD', 'IDR', 'INR', 'KRW', 'MYR',
-    'PHP', 'SGD', 'THB', 'TWD', 'VND', 'ISK'
-  ].sort();
+  // レートに含まれる全通貨を、優先通貨 → その他（アルファベット順）の順に並べる
+  const currencyOptions = useMemo(() => {
+    if (!rates) return FALLBACK_CURRENCIES;
 
-  const allCurrencies = rates
-    ? [...new Set(Object.keys(rates).flatMap(pair => pair.split('/')))]
-    : [];
+    const allCurrencies = [...new Set(Object.keys(rates).flatMap(pair => pair.split('/')))];
+    const otherCurrencies = allCurrencies
+      .filter(c => !PRIORITY_CURRENCIES.includes(c))
+      .sort();
 
-  const otherCurrencies = allCurrencies
-    .filter(c => !priorityCurrencies.includes(c))
-    .sort();
-
-  const currencyOptions = rates
-    ? [...priorityCurrencies, ...otherCurrencies]
-    : ['USD', 'EUR', 'JPY'];
+    return [...PRIORITY_CURRENCIES, ...otherCurrencies];
+  }, [rates]);
 
   return (
     <div className="app-container">

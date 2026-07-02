@@ -10,6 +10,7 @@ import traceback
 import uuid
 
 import firebase_admin
+import requests
 from firebase_admin import firestore, initialize_app, storage
 from firebase_functions import firestore_fn, https_fn, options
 
@@ -20,6 +21,19 @@ from services.detection import detect_prices_from_image
 # Firebase SDKの初期化
 if not firebase_admin._apps:
     initialize_app()
+
+
+def _json_response(payload: dict, status: int = 200, extra_headers: dict | None = None) -> https_fn.Response:
+    """JSON形式のHTTPレスポンスを生成する"""
+    headers = {"Content-Type": "application/json"}
+    if extra_headers:
+        headers.update(extra_headers)
+    return https_fn.Response(json.dumps(payload), status=status, headers=headers)
+
+
+def _error_response(message: str, status: int = 500) -> https_fn.Response:
+    """エラー用のJSONレスポンスを生成する"""
+    return _json_response({"success": False, "error": message}, status=status)
 
 
 # ---------------------------------------------------------------------------
@@ -34,21 +48,13 @@ def getExchangeRates(req: https_fn.Request) -> https_fn.Response:
     """Firebase Storageを24時間キャッシュとして利用し、為替レートを取得する"""
     try:
         result = fetch_and_cache_rates()
-        return https_fn.Response(
-            json.dumps(result["data"]),
-            status=200,
-            headers={
-                "Content-Type": "application/json",
-                "X-Cache-Status": result["cache_status"],
-            },
+        return _json_response(
+            result["data"],
+            extra_headers={"X-Cache-Status": result["cache_status"]},
         )
     except Exception as e:
         print(traceback.format_exc())
-        return https_fn.Response(
-            json.dumps({"success": False, "error": f"Failed to fetch exchange rates: {str(e)}"}),
-            status=500,
-            headers={"Content-Type": "application/json"},
-        )
+        return _error_response(f"Failed to fetch exchange rates: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
@@ -64,42 +70,27 @@ def getCurrencyFromLocation(req: https_fn.Request) -> https_fn.Response:
     try:
         request_json = req.get_json(silent=True)
         if not request_json or 'lat' not in request_json or 'lon' not in request_json:
-            return https_fn.Response(
-                json.dumps({"success": False, "error": "Invalid request"}),
-                status=400,
-                headers={"Content-Type": "application/json"},
-            )
+            return _error_response("Invalid request", status=400)
 
         result = get_currency_from_coordinates(request_json['lat'], request_json['lon'])
-        return https_fn.Response(
-            json.dumps(result),
-            status=200,
-            headers={"Content-Type": "application/json"},
-        )
+        return _json_response(result)
+
+    except requests.exceptions.HTTPError as e:
+        # OpenCage APIのクォータ超過は200で返す（USDフォールバック）
+        if e.response is not None and e.response.status_code == 402:
+            print("WARN: OpenCage API Quota exceeded (402). Returning USD as default.")
+            return _json_response({
+                "success": True,
+                "country_code": "",
+                "currency_code": "USD",
+                "cache": "fallback",
+            })
+        print(traceback.format_exc())
+        return _error_response(f"An unexpected error occurred: {str(e)}")
 
     except Exception as e:
-        # OpenCage APIのクォータ超過は200で返す（USDフォールバック）
-        if hasattr(e, '__cause__') or 'HTTPError' in type(e).__name__:
-            import requests as req_lib
-            if isinstance(e, req_lib.exceptions.HTTPError) and e.response.status_code == 402:
-                print("WARN: OpenCage API Quota exceeded (402). Returning USD as default.")
-                return https_fn.Response(
-                    json.dumps({
-                        "success": True,
-                        "country_code": "",
-                        "currency_code": "USD",
-                        "cache": "fallback",
-                    }),
-                    status=200,
-                    headers={"Content-Type": "application/json"},
-                )
-
         print(traceback.format_exc())
-        return https_fn.Response(
-            json.dumps({"success": False, "error": f"An unexpected error occurred: {str(e)}"}),
-            status=500,
-            headers={"Content-Type": "application/json"},
-        )
+        return _error_response(f"An unexpected error occurred: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
@@ -118,19 +109,12 @@ def detectPrices(req: https_fn.Request) -> https_fn.Response:
     try:
         request_json = req.get_json(silent=True)
         if not request_json or 'image_data' not in request_json:
-            return https_fn.Response(
-                json.dumps({"success": False, "error": "Invalid request"}),
-                status=400,
-                headers={"Content-Type": "application/json"},
-            )
+            return _error_response("Invalid request", status=400)
 
         job_id = str(uuid.uuid4())
         image_data_base64 = request_json['image_data']
-        image_content_base64 = (
-            image_data_base64.split(',')[1]
-            if ',' in image_data_base64
-            else image_data_base64
-        )
+        # "data:image/png;base64," プレフィックスがあれば取り除く
+        image_content_base64 = image_data_base64.split(',')[-1]
         image_bytes = base64.b64decode(image_content_base64)
 
         # 画像をCloud Storageにアップロード
@@ -152,19 +136,11 @@ def detectPrices(req: https_fn.Request) -> https_fn.Response:
             'thinkingLevel': request_json.get('thinking_level', 'medium'),
         })
 
-        return https_fn.Response(
-            json.dumps({"success": True, "jobId": job_id}),
-            status=202,
-            headers={"Content-Type": "application/json"},
-        )
+        return _json_response({"success": True, "jobId": job_id}, status=202)
 
     except Exception as e:
         print(traceback.format_exc())
-        return https_fn.Response(
-            json.dumps({"success": False, "error": f"An unexpected error occurred: {str(e)}"}),
-            status=500,
-            headers={"Content-Type": "application/json"},
-        )
+        return _error_response(f"An unexpected error occurred: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
@@ -223,9 +199,8 @@ def processImage(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
         # アップロード画像を削除
         try:
-            blob_to_delete = bucket.blob(f"uploads/{job_id}.png")
-            if blob_to_delete.exists():
-                blob_to_delete.delete()
+            if blob.exists():
+                blob.delete()
                 print(f"[Job {job_id}] Uploaded file deleted.")
         except Exception as e:
             print(f"[Job {job_id}] WARNING: Failed to delete uploaded file: {e}")

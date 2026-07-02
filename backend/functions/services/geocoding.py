@@ -1,7 +1,6 @@
 """ジオコーディング（位置情報→通貨コード）のビジネスロジック"""
 
 import os
-import traceback
 from datetime import datetime, timedelta, timezone
 
 import requests

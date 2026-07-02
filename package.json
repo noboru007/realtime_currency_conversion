@@ -12,8 +12,6 @@
     "deploy:functions": "firebase deploy --only functions"
   },
   "dependencies": {
-    "@google/genai": "^1.22.0",
-    "countries-and-timezones": "^3.8.0",
     "firebase": "^12.4.0",
     "html2canvas": "^1.4.1",
     "react": "^18.2.0",
@@ -21,7 +19,6 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^28.0.6",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-basic-ssl": "^2.1.0",
     "@vitejs/plugin-react": "^5.0.0",
