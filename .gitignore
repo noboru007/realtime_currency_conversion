@@ -28,6 +28,7 @@ venv/
 backend/functions/venv/
 
 # Fonts
+backend/fonts/
 backend/functions/fonts/
 
 # Large build/deployment files
