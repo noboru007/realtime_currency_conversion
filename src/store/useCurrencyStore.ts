@@ -37,11 +37,20 @@ interface CurrencyState {
   isSaveModalOpen: boolean;
   savedImageURL: string | null;
   deviceOrientation: 'portrait' | 'landscape';
-  thinkingLevel: string;
+  overlayModel: string;
+  overlayThinkingLevel: string;
+  imageModel: 'nanobanana2' | 'nanobanana-pro';
+  imageThinkingLevel: string;
+  imageSize: '1K' | '2K' | '4K';
+  translatedImageUrl: string | null;
+  translationJobId: string | null;
+  translationUnsubscribe: Unsubscribe | null;
 
   // 状態を更新するためのアクション
   setUserId: (userId: string) => void;
-  setThinkingLevel: (level: string) => void;
+  setOverlayModel: (model: string) => void;
+  setOverlayThinkingLevel: (level: string) => void;
+  setImageThinkingLevel: (level: string) => void;
   setStatus: (status: CurrencyState['status']) => void;
   setBanner: (banner: Banner | null) => void;
   setCapturedImage: (image: string | null) => void;
@@ -53,6 +62,8 @@ interface CurrencyState {
   setSaveModalOpen: (isOpen: boolean) => void;
   setSavedImageURL: (url: string | null) => void;
   setDeviceOrientation: (orientation: 'portrait' | 'landscape') => void;
+  setImageSize: (size: '1K' | '2K' | '4K') => void;
+  setImageModel: (model: 'nanobanana2' | 'nanobanana-pro') => void;
   listenToJobUpdates: (jobId: string) => void;
   showBanner: (message: string, type: Banner['type']) => void;
   hideBanner: () => void;
@@ -62,8 +73,12 @@ interface CurrencyState {
   loadUserSettings: () => Promise<boolean>;
   saveUserSettings: () => Promise<void>;
   performDetection: (language: string) => Promise<void>;
+  performTranslation: (language: string) => Promise<void>;
   resetState: () => void;
   setCalculatedRates: (rates: { localToHome: number | null, homeToLocal: number | null }) => void;
+  setTranslatedImageUrl: (url: string | null) => void;
+  closeTranslationViewer: () => void;
+  listenToTranslationUpdates: (jobId: string) => void;
 }
 
 let bannerTimeout: NodeJS.Timeout | null = null;
@@ -87,11 +102,20 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   isSaveModalOpen: false,
   savedImageURL: null,
   deviceOrientation: 'portrait',
-  thinkingLevel: 'medium',
+  overlayModel: 'gemini-3-flash-preview',
+  overlayThinkingLevel: 'medium',
+  imageModel: 'nanobanana2',
+  imageThinkingLevel: 'high',
+  imageSize: '1K',
+  translatedImageUrl: null,
+  translationJobId: null,
+  translationUnsubscribe: null,
 
   // --- 状態更新アクション ---
   setUserId: (userId) => set({ userId }),
-  setThinkingLevel: (level) => set({ thinkingLevel: level }),
+  setOverlayModel: (model) => set({ overlayModel: model }),
+  setOverlayThinkingLevel: (level) => set({ overlayThinkingLevel: level }),
+  setImageThinkingLevel: (level) => set({ imageThinkingLevel: level }),
   setStatus: (status) => set({ status }),
   setBanner: (banner) => set({ banner }),
   setCapturedImage: (image) => set({ capturedImage: image, detections: [] }),
@@ -103,6 +127,9 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   setSaveModalOpen: (isOpen) => set({ isSaveModalOpen: isOpen }),
   setSavedImageURL: (url) => set({ savedImageURL: url }),
   setDeviceOrientation: (orientation) => set({ deviceOrientation: orientation }),
+  setImageSize: (size) => set({ imageSize: size }),
+  setImageModel: (model) => set({ imageModel: model }),
+  setTranslatedImageUrl: (url) => set({ translatedImageUrl: url }),
 
   // --- 非同期アクション ---
   loadUserSettings: async () => {
@@ -148,30 +175,48 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   },
 
   fetchRates: async () => {
+    // 1時間以内のキャッシュがあればAPI呼び出しスキップ
+    const cachedRatesJson = localStorage.getItem('cachedRates');
+    const cachedTimestamp = localStorage.getItem('cachedRatesTimestamp');
+    if (cachedRatesJson && cachedTimestamp) {
+      const ageMs = Date.now() - parseInt(cachedTimestamp, 10);
+      if (ageMs < 60 * 60 * 1000) { // 1時間
+        try {
+          const cachedRates = JSON.parse(cachedRatesJson);
+          const firstKey = Object.keys(cachedRates)[0];
+          if (firstKey && cachedRates[firstKey].hasOwnProperty('bid')) {
+            set({ rates: cachedRates });
+            console.log(`[Rates] Cache HIT (${Math.round(ageMs / 60000)}min old)`);
+            return;
+          }
+        } catch (e) {
+          // キャッシュ破損 → 通常フローへ
+        }
+      }
+    }
+
     try {
       const data = await apiClient.getExchangeRates();
       if (data.rates && data.base_currency === 'USD') {
-        set({ rates: data.rates });
+        set({ rates: data.rates, banner: null });
         localStorage.setItem('cachedRates', JSON.stringify(data.rates));
-        set({ banner: null });
+        localStorage.setItem('cachedRatesTimestamp', Date.now().toString());
+        console.log('[Rates] Cache MISS → fetched from API');
       } else {
         throw new Error('Fetched rates data is not in the expected format.');
       }
     } catch (error) {
       console.warn('Failed to fetch new rates, attempting to load from cache.', error);
-      const cachedRatesJson = localStorage.getItem('cachedRates');
+      // API失敗時はタイムスタンプ関係なくキャッシュを使う
       if (cachedRatesJson) {
         try {
           const cachedRates = JSON.parse(cachedRatesJson);
-          // 簡単なキャッシュの形式チェック
           const firstKey = Object.keys(cachedRates)[0];
           if (firstKey && cachedRates[firstKey].hasOwnProperty('bid')) {
             set({ rates: cachedRates });
-            // 以下の行を削除またはコメントアウト
-            // set({ banner: { message: 'rateFetchFailedCacheUsed', type: 'warning' } });
           } else {
-            // 古い形式のキャッシュは使えないのでエラーとする
             localStorage.removeItem('cachedRates');
+            localStorage.removeItem('cachedRatesTimestamp');
             throw new Error('Cached rates data is outdated format.');
           }
         } catch (cacheError) {
@@ -184,7 +229,7 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
   },
 
   performDetection: async (language) => {
-    const { capturedImage, homeCurrency, localCurrency, localToHomeRate, deviceOrientation, thinkingLevel, resetState } = get();
+    const { capturedImage, homeCurrency, localCurrency, localToHomeRate, deviceOrientation, overlayModel, overlayThinkingLevel, resetState } = get();
 
     if (!capturedImage) return;
 
@@ -199,7 +244,8 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
         localCurrency,
         localToHomeRate,
         deviceOrientation,
-        thinkingLevel
+        overlayThinkingLevel,
+        overlayModel
       );
 
       if (response.success && response.jobId) {
@@ -285,7 +331,102 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
       isSaveModalOpen: false,
       savedImageURL: null,
       deviceOrientation: 'portrait',
+      translatedImageUrl: null,
+      translationJobId: null,
     });
+  },
+
+  closeTranslationViewer: () => {
+    const { translationUnsubscribe } = get();
+    if (translationUnsubscribe) {
+      translationUnsubscribe();
+    }
+    set({
+      translatedImageUrl: null,
+      translationJobId: null,
+      translationUnsubscribe: null,
+      capturedImage: null,
+      confirmationStep: null,
+      status: 'running',
+    });
+  },
+
+  performTranslation: async (language) => {
+    const { capturedImage, homeCurrency, localCurrency, localToHomeRate, imageSize, userId, imageThinkingLevel, imageModel, resetState } = get();
+
+    if (!capturedImage) return;
+
+    set({ status: 'analyzing', confirmationStep: null, translatedImageUrl: null, translationJobId: null });
+
+    try {
+      const response = await apiClient.translateImage(
+        capturedImage,
+        language,
+        localCurrency,
+        homeCurrency,
+        localToHomeRate || 1.0,
+        userId || '',
+        imageSize,
+        imageThinkingLevel,
+        imageModel,
+      );
+
+      if (response.success && response.jobId) {
+        set({ translationJobId: response.jobId });
+        get().listenToTranslationUpdates(response.jobId);
+      } else {
+        throw new Error(response.error || 'Failed to start translation job.');
+      }
+    } catch (error: any) {
+      console.error("Failed to perform translation:", error);
+      get().showBanner('generationFailed', 'error');
+      set({ status: 'running' });
+    }
+  },
+
+  listenToTranslationUpdates: (jobId) => {
+    const { translationUnsubscribe } = get();
+    if (translationUnsubscribe) {
+      translationUnsubscribe();
+    }
+
+    const unsub = onSnapshot(doc(db, "translationJobs", jobId),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const jobStatus = docSnap.get("status");
+          switch (jobStatus) {
+            case 'completed':
+              const translatedImageUrl = docSnap.get("translatedImageUrl");
+              set({
+                translatedImageUrl: translatedImageUrl,
+                status: 'processed',
+              });
+              unsub();
+              set({ translationUnsubscribe: null });
+              break;
+            case 'error':
+              console.error("Translation job failed:", docSnap.get("error"));
+              get().showBanner('generationFailed', 'error');
+              set({ status: 'running' });
+              unsub();
+              set({ translationUnsubscribe: null });
+              break;
+            case 'processing':
+            case 'pending':
+              break;
+          }
+        }
+      },
+      (error) => {
+        console.error("Error listening to translation job:", error);
+        get().showBanner('generationFailed', 'error');
+        set({ status: 'running' });
+        unsub();
+        set({ translationUnsubscribe: null });
+      }
+    );
+
+    set({ translationUnsubscribe: unsub });
   },
 
   showBanner: (message, type) => {

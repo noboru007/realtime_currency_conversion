@@ -29,6 +29,13 @@ export const translations = {
         priceNotDetected: '価格が見つかりませんでした',
         previewButton: 'プレビュー',
         closeButton: '閉じる',
+        imageGeneration: '画像生成 🍌',
+        overlay: 'オーバーレイ',
+        generating: '画像生成中...',
+        generationFailed: '画像生成に失敗しました',
+        saveImage: '保存',
+        generationComplete: '画像生成完了',
+        uploadImage: 'アップロード',
     },
     // 英語
     en: {
@@ -60,6 +67,13 @@ export const translations = {
         priceNotDetected: 'Price not detected',
         previewButton: 'Preview',
         closeButton: 'Close',
+        imageGeneration: 'Generate 🍌',
+        overlay: 'Overlay',
+        generating: 'Generating...',
+        generationFailed: 'Image generation failed',
+        saveImage: 'Save',
+        generationComplete: 'Generation complete',
+        uploadImage: 'Upload',
     },
     // フランス語
     fr: {
@@ -91,6 +105,13 @@ export const translations = {
         priceNotDetected: 'Prix non détecté',
         previewButton: 'Aperçu',
         closeButton: 'Fermer',
+        imageGeneration: 'Générer 🍌',
+        overlay: 'Superposition',
+        generating: 'Génération...',
+        generationFailed: 'Échec de la génération',
+        saveImage: 'Enregistrer',
+        generationComplete: 'Génération terminée',
+        uploadImage: 'Télécharger',
     },
     // 韓国語
     ko: {
@@ -122,6 +143,13 @@ export const translations = {
         priceNotDetected: '가격을 찾을 수 없습니다',
         previewButton: '미리보기',
         closeButton: '닫기',
+        imageGeneration: '이미지 생성 🍌',
+        overlay: '오버레이',
+        generating: '생성 중...',
+        generationFailed: '이미지 생성 실패',
+        saveImage: '저장',
+        generationComplete: '생성 완료',
+        uploadImage: '업로드',
     },
     // ヒンディー語
     hi: {
@@ -153,6 +181,13 @@ export const translations = {
         priceNotDetected: 'कीमत नहीं मिली',
         previewButton: 'पूर्वावलोकन',
         closeButton: 'बंद करें',
+        imageGeneration: 'छवि बनाएं 🍌',
+        overlay: 'ओवरले',
+        generating: 'छवि बन रही है...',
+        generationFailed: 'छवि बनाना विफल',
+        saveImage: 'सहेजें',
+        generationComplete: 'छवि तैयार',
+        uploadImage: 'अपलोड',
     },
     // インドネシア語
     id: {
@@ -184,6 +219,13 @@ export const translations = {
         priceNotDetected: 'Harga tidak ditemukan',
         previewButton: 'Pratinjau',
         closeButton: 'Tutup',
+        imageGeneration: 'Buat Gambar 🍌',
+        overlay: 'Overlay',
+        generating: 'Membuat...',
+        generationFailed: 'Gagal membuat gambar',
+        saveImage: 'Simpan',
+        generationComplete: 'Pembuatan selesai',
+        uploadImage: 'Unggah',
     },
     // 中国語（簡体字）
     'zh-CN': {
@@ -215,6 +257,13 @@ export const translations = {
         priceNotDetected: '未检测到价格',
         previewButton: '预览',
         closeButton: '关闭',
+        imageGeneration: '生成图片 🍌',
+        overlay: '覆盖层',
+        generating: '生成中...',
+        generationFailed: '图片生成失败',
+        saveImage: '保存',
+        generationComplete: '生成完成',
+        uploadImage: '上传',
     },
     // 中国語（繁体字）
     'zh-TW': {
@@ -246,6 +295,13 @@ export const translations = {
         priceNotDetected: '未偵測到價格',
         previewButton: '預覽',
         closeButton: '關閉',
+        imageGeneration: '生成圖片 🍌',
+        overlay: '覆蓋層',
+        generating: '生成中...',
+        generationFailed: '圖片生成失敗',
+        saveImage: '儲存',
+        generationComplete: '生成完成',
+        uploadImage: '上傳',
     },
     // ベトナム語
     vi: {
@@ -277,6 +333,13 @@ export const translations = {
         priceNotDetected: 'Không tìm thấy giá',
         previewButton: 'Xem trước',
         closeButton: 'Đóng',
+        imageGeneration: 'Tạo ảnh 🍌',
+        overlay: 'Lớp phủ',
+        generating: 'Đang tạo...',
+        generationFailed: 'Tạo ảnh thất bại',
+        saveImage: 'Lưu',
+        generationComplete: 'Tạo xong',
+        uploadImage: 'Tải lên',
     },
     // フィリピン語
     fil: {
@@ -308,6 +371,13 @@ export const translations = {
         priceNotDetected: 'Hindi nahanap ang presyo',
         previewButton: 'Preview',
         closeButton: 'Isara',
+        imageGeneration: 'Gumawa ng Larawan 🍌',
+        overlay: 'Overlay',
+        generating: 'Gumagawa...',
+        generationFailed: 'Nabigong gumawa ng larawan',
+        saveImage: 'I-save',
+        generationComplete: 'Tapos na',
+        uploadImage: 'I-upload',
     },
     // マレーシア語
     ms: {
@@ -339,6 +409,13 @@ export const translations = {
         priceNotDetected: 'Harga tidak ditemui',
         previewButton: 'Pratonton',
         closeButton: 'Tutup',
+        imageGeneration: 'Jana Imej 🍌',
+        overlay: 'Tindanan',
+        generating: 'Menjana...',
+        generationFailed: 'Gagal menjana imej',
+        saveImage: 'Simpan',
+        generationComplete: 'Penjanaan selesai',
+        uploadImage: 'Muat naik',
     },
     // タイ語
     th: {
@@ -370,6 +447,13 @@ export const translations = {
         priceNotDetected: 'ไม่พบราคา',
         previewButton: 'ดูตัวอย่าง',
         closeButton: 'ปิด',
+        imageGeneration: 'สร้างภาพ 🍌',
+        overlay: 'ซ้อนทับ',
+        generating: 'กำลังสร้าง...',
+        generationFailed: 'สร้างภาพไม่สำเร็จ',
+        saveImage: 'บันทึก',
+        generationComplete: 'สร้างเสร็จแล้ว',
+        uploadImage: 'อัปโหลด',
     },
     // ドイツ語
     de: {
@@ -401,6 +485,13 @@ export const translations = {
         priceNotDetected: 'Preis nicht gefunden',
         previewButton: 'Vorschau',
         closeButton: 'Schließen',
+        imageGeneration: 'Bild erstellen 🍌',
+        overlay: 'Überlagerung',
+        generating: 'Wird erstellt...',
+        generationFailed: 'Bilderstellung fehlgeschlagen',
+        saveImage: 'Speichern',
+        generationComplete: 'Erstellung abgeschlossen',
+        uploadImage: 'Hochladen',
     },
     // アイスランド語
     is: {
@@ -432,6 +523,13 @@ export const translations = {
         priceNotDetected: 'Verð fannst ekki',
         previewButton: 'Forskoða',
         closeButton: 'Loka',
+        imageGeneration: 'Búa til mynd 🍌',
+        overlay: 'Yfirlag',
+        generating: 'Bý til...',
+        generationFailed: 'Myndgerð mistókst',
+        saveImage: 'Vista',
+        generationComplete: 'Myndgerð lokið',
+        uploadImage: 'Hlaða upp',
     },
     // スペイン語
     es: {
@@ -463,6 +561,13 @@ export const translations = {
         priceNotDetected: 'Precio no detectado',
         previewButton: 'Vista previa',
         closeButton: 'Cerrar',
+        imageGeneration: 'Generar 🍌',
+        overlay: 'Superposición',
+        generating: 'Generando...',
+        generationFailed: 'Error al generar imagen',
+        saveImage: 'Guardar',
+        generationComplete: 'Generación completada',
+        uploadImage: 'Subir',
     },
     // ポルトガル語
     pt: {
@@ -494,6 +599,13 @@ export const translations = {
         priceNotDetected: 'Preço não detectado',
         previewButton: 'Visualizar',
         closeButton: 'Fechar',
+        imageGeneration: 'Gerar 🍌',
+        overlay: 'Sobreposição',
+        generating: 'Gerando...',
+        generationFailed: 'Falha ao gerar imagem',
+        saveImage: 'Salvar',
+        generationComplete: 'Geração concluída',
+        uploadImage: 'Enviar',
     },
     // イタリア語
     it: {
@@ -525,6 +637,13 @@ export const translations = {
         priceNotDetected: 'Prezzo non trovato',
         previewButton: 'Anteprima',
         closeButton: 'Chiudi',
+        imageGeneration: 'Genera 🍌',
+        overlay: 'Sovrapposizione',
+        generating: 'Generazione...',
+        generationFailed: 'Generazione immagine fallita',
+        saveImage: 'Salva',
+        generationComplete: 'Generazione completata',
+        uploadImage: 'Carica',
     },
 };
 

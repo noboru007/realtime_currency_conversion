@@ -4,11 +4,36 @@ import { useTranslationStore } from '../store/useTranslationStore';
 import { getExchangeRate } from '../utils/currency';
 import { supportedLanguages } from '../i18n/translations';
 
-const THINKING_LEVELS = [
+const OVERLAY_MODELS = [
+    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+] as const;
+
+const OVERLAY_THINKING_LEVELS = [
     { value: 'minimal', label: 'Minimal' },
     { value: 'low', label: 'Low' },
     { value: 'medium', label: 'Medium' },
     { value: 'high', label: 'High' },
+] as const;
+
+const IMAGE_MODELS = [
+    { value: 'nanobanana2', label: 'Nano Banana 2 (Fast)' },
+    { value: 'nanobanana-pro', label: 'Nano Banana Pro (Quality)' },
+] as const;
+
+// Image Thinking Levels are model-dependent
+const IMAGE_THINKING_LEVELS: Record<string, { value: string; label: string }[]> = {
+    'nanobanana2': [
+        { value: 'minimal', label: 'Minimal' },
+        { value: 'high', label: 'High' },
+    ],
+    'nanobanana-pro': [], // not supported
+};
+
+const IMAGE_SIZES = [
+    { value: '1K', label: '1K (1024×1024)' },
+    { value: '2K', label: '2K (2048×2048)' },
+    { value: '4K', label: '4K (4096×4096)' },
 ] as const;
 
 interface HamburgerMenuProps {
@@ -25,8 +50,16 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ currencyOptions })
         setHomeCurrency,
         setLocalCurrency,
         rates,
-        thinkingLevel,
-        setThinkingLevel,
+        overlayModel,
+        setOverlayModel,
+        overlayThinkingLevel,
+        setOverlayThinkingLevel,
+        imageModel,
+        setImageModel,
+        imageThinkingLevel,
+        setImageThinkingLevel,
+        imageSize,
+        setImageSize,
         localToHomeRate,
         homeToLocalRate,
         setCalculatedRates,
@@ -80,6 +113,18 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ currencyOptions })
         return { unit: 1, value: rate.toFixed(4) };
     };
 
+    // Image Model変更時にThinking Levelをリセット
+    const handleImageModelChange = (model: 'nanobanana2' | 'nanobanana-pro') => {
+        setImageModel(model);
+        const levels = IMAGE_THINKING_LEVELS[model] || [];
+        if (levels.length > 0) {
+            // デフォルトで最後の選択肢（high）を選択
+            setImageThinkingLevel(levels[levels.length - 1].value);
+        }
+    };
+
+    const imageThinkingOptions = IMAGE_THINKING_LEVELS[imageModel] || [];
+
     return (
         <div className="hamburger-menu-wrapper" ref={menuRef}>
             {/* ハンバーガーボタン */}
@@ -96,6 +141,7 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ currencyOptions })
             {/* メニューパネル */}
             {isOpen && <div className="hamburger-overlay" onClick={() => setIsOpen(false)} />}
             <div className={`hamburger-panel ${isOpen ? 'open' : ''}`}>
+                {/* ── 通貨設定 ── */}
                 <div className="menu-section">
                     <label className="menu-label">{t('homeCurrencyLabel')}</label>
                     <select
@@ -128,6 +174,7 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ currencyOptions })
 
                 <div className="menu-divider" />
 
+                {/* ── 言語 ── */}
                 <div className="menu-section">
                     <label className="menu-label">Language</label>
                     <select
@@ -141,15 +188,79 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ currencyOptions })
                     </select>
                 </div>
 
+                <div className="menu-divider" />
+
+                {/* ── オーバーレイ設定 ── */}
+                <div className="menu-section-header">Overlay</div>
+
+                <div className="menu-section">
+                    <label className="menu-label">Model</label>
+                    <select
+                        value={overlayModel}
+                        onChange={(e) => setOverlayModel(e.target.value)}
+                        className="menu-select"
+                    >
+                        {OVERLAY_MODELS.map(m => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                    </select>
+                </div>
+
                 <div className="menu-section">
                     <label className="menu-label">Thinking Level</label>
                     <select
-                        value={thinkingLevel}
-                        onChange={(e) => setThinkingLevel(e.target.value)}
+                        value={overlayThinkingLevel}
+                        onChange={(e) => setOverlayThinkingLevel(e.target.value)}
                         className="menu-select"
                     >
-                        {THINKING_LEVELS.map(level => (
+                        {OVERLAY_THINKING_LEVELS.map(level => (
                             <option key={level.value} value={level.value}>{level.label}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="menu-divider" />
+
+                {/* ── 画像翻訳設定 ── */}
+                <div className="menu-section-header">Image Translation</div>
+
+                <div className="menu-section">
+                    <label className="menu-label">Model</label>
+                    <select
+                        value={imageModel}
+                        onChange={(e) => handleImageModelChange(e.target.value as 'nanobanana2' | 'nanobanana-pro')}
+                        className="menu-select"
+                    >
+                        {IMAGE_MODELS.map(model => (
+                            <option key={model.value} value={model.value}>{model.label}</option>
+                        ))}
+                    </select>
+                </div>
+
+                {imageThinkingOptions.length > 0 && (
+                    <div className="menu-section">
+                        <label className="menu-label">Thinking Level</label>
+                        <select
+                            value={imageThinkingLevel}
+                            onChange={(e) => setImageThinkingLevel(e.target.value)}
+                            className="menu-select"
+                        >
+                            {imageThinkingOptions.map(level => (
+                                <option key={level.value} value={level.value}>{level.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                <div className="menu-section">
+                    <label className="menu-label">Image Size</label>
+                    <select
+                        value={imageSize}
+                        onChange={(e) => setImageSize(e.target.value as '1K' | '2K' | '4K')}
+                        className="menu-select"
+                    >
+                        {IMAGE_SIZES.map(size => (
+                            <option key={size.value} value={size.value}>{size.label}</option>
                         ))}
                     </select>
                 </div>

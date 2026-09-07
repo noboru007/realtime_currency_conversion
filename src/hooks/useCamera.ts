@@ -16,8 +16,8 @@ export const useCamera = () => {
                 const constraints = {
                     video: {
                         facingMode: 'environment',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
+                        width: { ideal: 3840 },
+                        height: { ideal: 2160 },
                         aspectRatio: { ideal: 9 / 16 }
                     }
                 };
@@ -65,8 +65,8 @@ export const useCamera = () => {
             sy = (videoHeight - sHeight) / 2;
         }
 
-        // 画像リサイズ（最大1920x1920）
-        const MAX_DIMENSION = 1920;
+        // 画像リサイズ（Gemini推奨の最大3072px）
+        const MAX_DIMENSION = 3072;
         let targetWidth = sWidth;
         let targetHeight = sHeight;
 

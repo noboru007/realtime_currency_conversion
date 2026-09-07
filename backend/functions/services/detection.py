@@ -4,9 +4,6 @@ import io
 import json
 import time
 
-from google import genai
-from PIL import Image
-
 from .currency import convert_and_format_currency
 
 # Gemini APIのレスポンス用JSONスキーマ
@@ -72,6 +69,7 @@ def detect_prices_from_image(
     device_orientation: str,
     job_id: str,
     thinking_level: str = 'medium',
+    overlay_model: str = 'gemini-3-flash-preview',
 ) -> list[dict]:
     """画像から価格を検出し、変換済みの検出結果リストを返す
 
@@ -87,6 +85,9 @@ def detect_prices_from_image(
     Returns:
         クライアント描画用の検出結果リスト
     """
+    from google import genai
+    from PIL import Image
+
     img = Image.open(io.BytesIO(image_bytes))
 
     if device_orientation == 'landscape':
@@ -99,7 +100,7 @@ def detect_prices_from_image(
 
     start_time = time.time()
     response = client.models.generate_content(
-        model="gemini-3-flash-preview",
+        model=overlay_model,
         contents=[prompt, img],
         config={
             "temperature": 1,

@@ -51,7 +51,8 @@ export const apiClient = {
     localCurrency: string = '',
     exchangeRate: number | null = 1.0,
     deviceOrientation: 'portrait' | 'landscape' = 'portrait',
-    thinkingLevel: string = 'medium'
+    thinkingLevel: string = 'medium',
+    overlayModel: string = 'gemini-3-flash-preview',
   ): Promise<DetectionResponse> {
     try {
       const response = await fetch(`${API_BASE_URL}/detectPrices`, {
@@ -67,6 +68,7 @@ export const apiClient = {
           exchange_rate: exchangeRate || 1.0,
           device_orientation: deviceOrientation,
           thinking_level: thinkingLevel,
+          overlay_model: overlayModel,
         }),
       });
 
@@ -155,6 +157,61 @@ export const apiClient = {
       throw new Error(data.error || 'Failed to get currency from location');
     }
     return data;
+  },
+
+  // 画像翻訳（Nano Banana 2）
+  async translateImage(
+    imageData: string,
+    language: string,
+    localCurrency: string,
+    homeCurrency: string,
+    exchangeRate: number,
+    userId: string,
+    imageSize: string = '1K',
+    thinkingLevel: string = 'medium',
+    imageModel: string = 'nanobanana2',
+  ): Promise<DetectionResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/translateImage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image_data: imageData,
+          language: language,
+          local_currency: localCurrency,
+          home_currency: homeCurrency,
+          exchange_rate: exchangeRate,
+          user_id: userId,
+          image_size: imageSize,
+          thinking_level: thinkingLevel,
+          image_model: imageModel,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorBody = { message: `API request failed with status ${response.status}` };
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          try {
+            errorBody = await response.json();
+          } catch (e) {
+            console.error("Failed to parse JSON error response:", e);
+          }
+        }
+        const error: any = new Error(errorBody.message || 'API request failed');
+        error.response = { data: errorBody, status: response.status };
+        throw error;
+      }
+      return response.json();
+
+    } catch (error: any) {
+      console.error("Translation API request failed:", error);
+      const newError: any = new Error(error.message || 'Network error');
+      newError.response = error.response || { data: { message: error.message }, status: 500 };
+      throw newError;
+    }
   },
 
 };

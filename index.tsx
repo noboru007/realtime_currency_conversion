@@ -8,9 +8,11 @@ import { HamburgerMenu } from './src/components/HamburgerMenu';
 import { AnalyzingOverlay } from './src/components/AnalyzingOverlay';
 import { GlobalBanner } from './src/components/GlobalBanner';
 import { SaveConfirmationModal } from './src/components/SaveConfirmationModal';
+import { ImageTranslationViewer } from './src/components/ImageTranslationViewer';
 import { useCamera } from './src/hooks/useCamera';
 import { useSaveImage } from './src/hooks/useSaveImage';
 import { useInitialize } from './src/hooks/useInitialize';
+import { useShareTarget } from './src/hooks/useShareTarget';
 
 const App: React.FC = () => {
   const {
@@ -18,6 +20,7 @@ const App: React.FC = () => {
     status,
     banner,
     confirmationStep,
+    translatedImageUrl,
   } = useCurrencyStore();
 
   const { videoRef, startCamera, handleCapture } = useCamera();
@@ -25,6 +28,9 @@ const App: React.FC = () => {
 
   // 初期化処理
   useInitialize(startCamera);
+
+  // Web Share Target APIで共有された画像を処理
+  useShareTarget();
 
   // Visibility Changeイベントを監視（タブ復帰時にカメラ再起動）
   useEffect(() => {
@@ -87,6 +93,7 @@ const App: React.FC = () => {
       {status === 'analyzing' && <AnalyzingOverlay />}
       {banner && !confirmationStep && <GlobalBanner />}
       <SaveConfirmationModal />
+      {translatedImageUrl && <ImageTranslationViewer />}
     </div>
   );
 };

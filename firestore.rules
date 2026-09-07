@@ -14,6 +14,15 @@ service cloud.firestore {
     match /detectionJobs/{jobId} {
       allow read, write: if request.auth != null;
     }
+
+    // 画像翻訳ジョブ: userId で読み取り制限（他人の結果を見れないようにする）
+    match /translationJobs/{jobId} {
+      allow read: if request.auth != null
+                   && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
+                     && request.resource.data.userId == request.auth.uid;
+      allow update: if false;  // サーバーサイドSDKのみ
+    }
     
     // 位置情報キャッシュ:
     // クライアントからは読み取りのみ許可（書き込みはサーバーが行うため）

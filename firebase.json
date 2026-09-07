@@ -20,13 +20,17 @@
         "function": "getCurrencyFromLocation"
       },
       {
+        "source": "/translateImage",
+        "function": "translateImage"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
     ],
     "headers": [
       {
-        "source": "/**", 
+        "source": "/**",
         "headers": [
           {
             "key": "Access-Control-Allow-Origin",

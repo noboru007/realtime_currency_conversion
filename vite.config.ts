@@ -15,12 +15,17 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw.ts',
         registerType: 'autoUpdate',
+        injectRegister: 'auto',
         manifest: {
           name: 'Realtime Currency Conversion',
           short_name: 'CurrencyConvert',
           description: 'Real-time currency conversion using OCR',
-          theme_color: '#ffffff',
+          theme_color: '#1a2744',
+          background_color: '#1a2744',
           icons: [
             {
               src: 'pwa-192x192.png',
@@ -32,26 +37,24 @@ export default defineConfig(({ mode }) => {
               sizes: '512x512',
               type: 'image/png'
             }
-          ]
-        },
-        workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-          navigateFallback: null,
-          runtimeCaching: [
-            {
-              urlPattern: /.*/,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'all-resources',
-                expiration: {
-                  maxEntries: 50,
-                  maxAgeSeconds: 60 * 60, // 1 hour
-                },
-                networkTimeoutSeconds: 5,
-              },
-            },
           ],
-        }
+          share_target: {
+            action: '/share-target',
+            method: 'POST',
+            enctype: 'multipart/form-data',
+            params: {
+              files: [
+                {
+                  name: 'image',
+                  accept: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+                },
+              ],
+            },
+          },
+        },
+        injectManifest: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        },
       }),
       // basicSsl(), // ★ この行をコメントアウト
     ],
